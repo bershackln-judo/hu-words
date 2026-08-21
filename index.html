@@ -182,7 +182,10 @@
 <div class="wrap">
   <header>
     <div class="title"><em>Magyar</em> szavak</div>
-    <button class="icon-btn" id="gearBtn" aria-label="Настройки">⚙</button>
+    <div style="display:flex;gap:8px;">
+      <button class="icon-btn" id="quickAddBtn" aria-label="Добавить слово" title="Добавить слово" style="font-size:22px;font-weight:300;">＋</button>
+      <button class="icon-btn" id="gearBtn" aria-label="Настройки">⚙</button>
+    </div>
   </header>
 
   <!-- STUDY TAB -->
@@ -223,21 +226,11 @@
     <div id="catBreakdown"></div>
   </div>
 
-  <!-- DECKS TAB -->
-  <div id="tabDecks" class="hidden">
-    <div class="panel">
-      <label>Название новой колоды</label>
-      <input type="text" id="newDeckName" placeholder="напр. Автошкола">
-      <div class="row"><button class="act primary" id="createDeckBtn" style="flex:none; width:100%;">Создать колоду</button></div>
-    </div>
-    <div id="decksList"></div>
-  </div>
 </div>
 
 <nav class="tabs">
   <button data-tab="study" class="active"><span class="ic">📇</span>Учить</button>
   <button data-tab="words"><span class="ic">📚</span>Слова</button>
-  <button data-tab="decks"><span class="ic">🗂️</span>Колоды</button>
   <button data-tab="stats"><span class="ic">📊</span>Статистика</button>
 </nav>
 
@@ -280,17 +273,18 @@
   </div>
 </div>
 
-<div class="overlay hidden" id="groupOverlay">
+<div class="overlay hidden" id="quickAddOverlay">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <div class="section-title">Что учить сегодня</div>
-    <div class="panel" id="groupCheckboxes"></div>
-    <div class="row">
-      <button class="act" id="groupSelectAll">Выбрать всё</button>
-      <button class="act" id="groupSelectNone">Снять всё</button>
-    </div>
-    <div class="row">
-      <button class="act primary" id="groupApply" style="width:100%">Применить</button>
+    <div class="section-title" style="margin-top:0;">Новое слово</div>
+    <div class="panel">
+      <label>Венгерский</label>
+      <input type="text" id="qaHu" placeholder="напр. barátság" autocapitalize="none" autocorrect="off">
+      <label>Русский перевод</label>
+      <input type="text" id="qaRu" placeholder="напр. дружба">
+      <div class="row" style="margin-top:14px;">
+        <button class="act primary" id="qaSubmitBtn" style="width:100%;">Добавить</button>
+      </div>
     </div>
   </div>
 </div>
@@ -362,7 +356,7 @@ function uid(){ return 'c'+Date.now()+Math.random().toString(36).slice(2,7); }
 
 function defaultState(){
   return {
-    settings: { wordSet: 'core', direction: 'hu-ru', studyPos: [], activeDeckId: null },
+    settings: { wordSet: 'core', direction: 'hu-ru', studyMode: 'dict' },
     decks: [],
     cards: {},
     learned: [],
@@ -379,8 +373,7 @@ function applyLoadedState(loaded){
   state.settings = Object.assign(defaultState().settings, loaded.settings || {});
   if(!Array.isArray(state.learned)) state.learned = [];
   if(!Array.isArray(state.decks)) state.decks = [];
-  if(state.settings.activeDeckId === undefined) state.settings.activeDeckId = null;
-  if(!Array.isArray(state.settings.studyPos)) state.settings.studyPos = [];
+  if(!state.settings.studyMode) state.settings.studyMode = 'dict';
   if(state.newIntroducedDate !== todayStr()){
     state.newIntroducedDate = todayStr();
     state.newIntroducedCount = 0;
@@ -432,19 +425,12 @@ function getAllWordsForBrowsing(){
   return base.concat(custom);
 }
 function getStudyPool(){
-  let pool;
-  if(state.settings.activeDeckId){
-    const deck = state.decks.find(d => d.id === state.settings.activeDeckId);
-    if(deck){
-      pool = getAllWordsForBrowsing().filter(w => deck.wordKeys.includes(w.key) && !state.learned.includes(w.key));
-      return pool;
-    }
+  if(state.settings.studyMode === 'custom'){
+    return state.custom
+      .filter(c => !state.learned.includes('custom:'+c.id))
+      .map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos:c.pos||'сущ', custom:true }));
   }
-  pool = getAllActiveWords().filter(w => !state.learned.includes(w.key));
-  if(state.settings.studyPos && state.settings.studyPos.length > 0){
-    pool = pool.filter(w => state.settings.studyPos.includes(w.pos));
-  }
-  return pool;
+  return getAllActiveWords().filter(w => !state.learned.includes(w.key));
 }
 function findWord(key){
   return getAllWordsForBrowsing().find(w => w.key === key);
@@ -507,24 +493,21 @@ function pickDirection(){
 /* ---------- RENDER: STUDY ---------- */
 function renderQuickChips(){
   const el = document.getElementById('quickChips');
-  const wordSetLabel = state.settings.wordSet === 'core' ? 'Ядро 384' : 'Весь словарь';
+  const mode = state.settings.studyMode || 'dict';
   const dirLabel = {'hu-ru':'HU→RU','ru-hu':'RU→HU','mixed':'Вперемешку'}[state.settings.direction];
-  const sp = state.settings.studyPos || [];
-  const groupLabel = sp.length === 0 ? 'Группы: все' : (sp.length === 1 ? POS_LABELS[sp[0]] : `Группы: ${sp.length}`);
-  const activeDeck = state.settings.activeDeckId ? state.decks.find(d=>d.id===state.settings.activeDeckId) : null;
-  el.innerHTML = activeDeck ? `
-    <button class="chip active" data-act="deck-active">🗂️ ${escapeHtml(activeDeck.name)} ✕</button>
-    <button class="chip active" data-act="cyc-dir">${dirLabel}</button>
-  ` : `
-    <button class="chip active" data-act="cyc-wordset">${wordSetLabel}</button>
-    <button class="chip active" data-act="cyc-dir">${dirLabel}</button>
-    <button class="chip" data-act="open-groups">${groupLabel}</button>
-  `;
+  const wordSetLabel = state.settings.wordSet === 'core' ? 'Ядро' : 'Все слова';
+  let html = `<button class="chip ${mode==='dict'?'active':''}" data-act="mode-dict">Словарь</button>`
+    + `<button class="chip ${mode==='custom'?'active':''}" data-act="mode-custom">Мои слова</button>`;
+  if(mode === 'dict'){
+    html += `<button class="chip active" data-act="cyc-wordset">${wordSetLabel}</button>`;
+  }
+  html += `<button class="chip active" data-act="cyc-dir">${dirLabel}</button>`;
+  el.innerHTML = html;
   el.querySelectorAll('.chip').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const act = btn.dataset.act;
-      if(act==='open-groups'){ openGroupPicker(); return; }
-      if(act==='deck-active'){ state.settings.activeDeckId = null; }
+      if(act==='mode-dict') state.settings.studyMode = 'dict';
+      if(act==='mode-custom') state.settings.studyMode = 'custom';
       if(act==='cyc-wordset') state.settings.wordSet = state.settings.wordSet==='core' ? 'full':'core';
       if(act==='cyc-dir'){
         const order=['hu-ru','ru-hu','mixed'];
@@ -547,7 +530,11 @@ function renderStudy(){
   document.getElementById('progressFill').style.width = total>0 ? Math.round(100*sessionReviewed/total)+'%' : '0%';
 
   if(queue.length === 0){
-    cardArea.innerHTML = `<div class="card done"><div class="big">Готово 👏</div><p>Новые карточки и повторения появятся завтра.</p></div>`;
+    const isCustom = state.settings.studyMode === 'custom';
+    const noWords = isCustom && state.custom.length === 0;
+    cardArea.innerHTML = noWords
+      ? `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> в углу, чтобы добавить первое слово.</p></div>`
+      : `<div class="card done"><div class="big">Готово 👏</div><p>${isCustom ? 'Все свои слова пройдены — добавьте новые через ＋.' : 'Новые карточки и повторения появятся завтра.'}</p></div>`;
     return;
   }
 
@@ -660,11 +647,9 @@ function renderWordsList(){
       <div class="ru">${escapeHtml(w.ru)}</div>
       <div class="actions">
         <button data-act="edit">Изменить перевод</button>
-        <button data-act="toggle-deck-picker">+ Колода</button>
         ${statusBtn}
         ${w.custom ? '<button data-act="delete">Удалить</button>' : ''}
       </div>
-      <div class="deck-picker hidden" id="deckpicker-${escapeHtml(w.key)}"></div>
     </div>
   `;}).join('');
 
@@ -673,7 +658,6 @@ function renderWordsList(){
     item.querySelectorAll('button').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         const act = btn.dataset.act;
-        if(act === 'toggle-deck-picker'){ toggleInlineDeckPicker(key); return; }
         if(act === 'learn-done'){ state.learned.push(key); }
         if(act === 'restore-learned'){
           state.learned = state.learned.filter(k=>k!==key);
@@ -697,36 +681,6 @@ function renderWordsList(){
   });
 }
 function renderWordsTab(){ renderWordFilterChips(); renderPosFilterChips(); renderWordsList(); }
-
-function toggleInlineDeckPicker(key){
-  const container = document.querySelector(`.word-item[data-key="${CSS.escape(key)}"] .deck-picker`);
-  if(!container) return;
-  const wasHidden = container.classList.contains('hidden');
-  document.querySelectorAll('.deck-picker').forEach(dp => dp.classList.add('hidden'));
-  if(wasHidden){
-    renderDeckPickerContent(key, container);
-    container.classList.remove('hidden');
-  }
-}
-function renderDeckPickerContent(key, container){
-  if(state.decks.length === 0){
-    container.innerHTML = `<span style="font-size:12.5px;color:var(--text-muted);">Нет колод — создай на вкладке «Колоды»</span>`;
-    return;
-  }
-  container.innerHTML = state.decks.map(d=>{
-    const inDeck = d.wordKeys.includes(key);
-    return `<button class="chip ${inDeck?'in-deck':''}" data-deck-id="${d.id}">${inDeck?'✓ ':''}${escapeHtml(d.name)}</button>`;
-  }).join('');
-  container.querySelectorAll('button').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const deck = state.decks.find(d=>d.id===btn.dataset.deckId);
-      if(deck.wordKeys.includes(key)) deck.wordKeys = deck.wordKeys.filter(k=>k!==key);
-      else deck.wordKeys.push(key);
-      await saveState();
-      renderDeckPickerContent(key, container);
-    });
-  });
-}
 
 document.getElementById('searchInput').addEventListener('input', renderWordsList);
 document.getElementById('addWordBtn').addEventListener('click', async ()=>{
@@ -789,11 +743,9 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     currentTab = btn.dataset.tab;
     document.getElementById('tabStudy').classList.toggle('hidden', currentTab!=='study');
     document.getElementById('tabWords').classList.toggle('hidden', currentTab!=='words');
-    document.getElementById('tabDecks').classList.toggle('hidden', currentTab!=='decks');
     document.getElementById('tabStats').classList.toggle('hidden', currentTab!=='stats');
     if(currentTab==='study'){ buildQueue(); renderQuickChips(); renderStudy(); }
     if(currentTab==='words') renderWordsTab();
-    if(currentTab==='decks') renderDecksTab();
     if(currentTab==='stats') renderStats();
   });
 });
@@ -862,96 +814,26 @@ document.getElementById('resetBtn').addEventListener('click', async ()=>{
   }
 });
 
-/* ---------- DECKS TAB (свои наборы слов, например 20-50 штук по теме) ---------- */
-function renderDecksTab(){
-  const list = document.getElementById('decksList');
-  if(state.decks.length === 0){
-    list.innerHTML = `<div class="empty-note">Пока нет ни одной колоды. Создай выше, потом добавляй слова через вкладку «Слова».</div>`;
-    return;
-  }
-  list.innerHTML = state.decks.map(d => {
-    const isActive = state.settings.activeDeckId === d.id;
-    return `
-    <div class="word-item" data-deck="${d.id}">
-      <div class="top"><span class="hu">${escapeHtml(d.name)}</span><span class="cat">${d.wordKeys.length} слов</span></div>
-      <div class="actions">
-        <button data-act="${isActive ? 'deactivate' : 'activate'}">${isActive ? '✓ Учится сейчас' : 'Учить эту колоду'}</button>
-        <button data-act="rename">Переименовать</button>
-        <button data-act="delete">Удалить</button>
-      </div>
-    </div>`;
-  }).join('');
-
-  list.querySelectorAll('.word-item').forEach(item=>{
-    const deckId = item.dataset.deck;
-    item.querySelectorAll('button').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{
-        const act = btn.dataset.act;
-        if(act === 'activate'){ state.settings.activeDeckId = deckId; }
-        if(act === 'deactivate'){ state.settings.activeDeckId = null; }
-        if(act === 'rename'){
-          const d = state.decks.find(x=>x.id===deckId);
-          const nv = prompt('Новое название колоды:', d.name);
-          if(nv !== null && nv.trim()) d.name = nv.trim();
-        }
-        if(act === 'delete'){
-          if(confirm('Удалить эту колоду? Слова из словаря никуда не денутся, удалится только сама колода.')){
-            state.decks = state.decks.filter(x=>x.id!==deckId);
-            if(state.settings.activeDeckId === deckId) state.settings.activeDeckId = null;
-          }
-        }
-        await saveState();
-        buildQueue(); sessionReviewed=0;
-        renderDecksTab();
-      });
-    });
-  });
-}
-document.getElementById('createDeckBtn').addEventListener('click', async ()=>{
-  const nameInput = document.getElementById('newDeckName');
-  const name = nameInput.value.trim();
-  if(!name){ alert('Впиши название колоды'); return; }
-  state.decks.push({ id: uid(), name, wordKeys: [] });
+/* ---------- QUICK ADD WORD ---------- */
+document.getElementById('quickAddBtn').addEventListener('click', ()=>{
+  document.getElementById('qaHu').value = '';
+  document.getElementById('qaRu').value = '';
+  document.getElementById('quickAddOverlay').classList.remove('hidden');
+  setTimeout(()=> document.getElementById('qaHu').focus(), 100);
+});
+document.getElementById('qaSubmitBtn').addEventListener('click', async ()=>{
+  const hu = document.getElementById('qaHu').value.trim();
+  const ru = document.getElementById('qaRu').value.trim();
+  if(!hu || !ru) return;
+  state.custom.push({ id: uid(), hu, ru, cat: 'Мои слова', pos: 'сущ' });
+  state.settings.studyMode = 'custom';
   await saveState();
-  nameInput.value = '';
-  renderDecksTab();
-});
-
-/* ---------- GROUP PICKER (учить конкретную часть речи/группу) ---------- */
-function openGroupPicker(){
-  const el = document.getElementById('groupCheckboxes');
-  const active = getAllActiveWords();
-  const counts = {};
-  active.forEach(w=>{ counts[w.pos] = (counts[w.pos]||0)+1; });
-  const order = ['сущ','гл','прил','нареч','местоим','числ','союз','предлог','частица','служ','фраза'];
-  const selected = state.settings.studyPos || [];
-  el.innerHTML = order.filter(p=>counts[p]).map(p=>{
-    const checked = selected.length===0 || selected.includes(p);
-    return `<div class="check-row">
-      <label><input type="checkbox" data-pos="${p}" ${checked?'checked':''}> ${POS_LABELS[p]}</label>
-      <span class="cnt">${counts[p]}</span>
-    </div>`;
-  }).join('');
-  document.getElementById('groupOverlay').classList.remove('hidden');
-}
-document.getElementById('groupSelectAll').addEventListener('click', ()=>{
-  document.querySelectorAll('#groupCheckboxes input[type=checkbox]').forEach(cb=>cb.checked=true);
-});
-document.getElementById('groupSelectNone').addEventListener('click', ()=>{
-  document.querySelectorAll('#groupCheckboxes input[type=checkbox]').forEach(cb=>cb.checked=false);
-});
-document.getElementById('groupApply').addEventListener('click', async ()=>{
-  const boxes = Array.from(document.querySelectorAll('#groupCheckboxes input[type=checkbox]'));
-  const checked = boxes.filter(cb=>cb.checked).map(cb=>cb.dataset.pos);
-  // если отмечены все — считаем, что фильтра нет (проще и быстрее в дальнейшем)
-  state.settings.studyPos = (checked.length === boxes.length) ? [] : checked;
-  await saveState();
-  document.getElementById('groupOverlay').classList.add('hidden');
-  buildQueue(); sessionReviewed=0;
+  document.getElementById('quickAddOverlay').classList.add('hidden');
+  buildQueue(); sessionReviewed = 0;
   renderQuickChips(); renderStudy();
 });
-document.getElementById('groupOverlay').addEventListener('click', (e)=>{
-  if(e.target.id === 'groupOverlay') document.getElementById('groupOverlay').classList.add('hidden');
+document.getElementById('quickAddOverlay').addEventListener('click', e => {
+  if(e.target.id === 'quickAddOverlay') document.getElementById('quickAddOverlay').classList.add('hidden');
 });
 
 /* ---------- AUTH UI ---------- */
