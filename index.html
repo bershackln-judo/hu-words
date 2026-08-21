@@ -965,7 +965,9 @@ document.getElementById('authSkipBtn').addEventListener('click', skipAuth);
 function setAuthMode(mode){
   authMode = mode;
   document.querySelectorAll('#authModeTabs .chip').forEach(c => c.classList.toggle('active', c.dataset.mode === mode));
-  document.getElementById('authSubmitBtn').textContent = mode === 'register' ? 'Создать аккаунт' : 'Войти';
+  const btn = document.getElementById('authSubmitBtn');
+  btn.textContent = mode === 'register' ? 'Создать аккаунт' : 'Войти';
+  btn.disabled = false;
   document.getElementById('authPassword').placeholder = mode === 'register' ? 'минимум 6 символов' : 'ваш пароль';
   document.getElementById('authPassword').autocomplete = mode === 'register' ? 'new-password' : 'current-password';
   document.getElementById('authError').style.display = 'none';
@@ -1019,6 +1021,9 @@ function renderAccountPanel(){
       + '</div>';
     document.getElementById('showAuthBtn').addEventListener('click', ()=>{
       document.getElementById('settingsOverlay').classList.add('hidden');
+      setAuthMode('register');
+      document.getElementById('authEmail').value = '';
+      document.getElementById('authPassword').value = '';
       document.getElementById('authOverlay').classList.remove('hidden');
     });
     if(note) note.textContent = 'Прогресс сохраняется прямо в этом браузере на этом устройстве';
