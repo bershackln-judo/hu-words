@@ -293,7 +293,10 @@
       </div>
       <p id="qaTranslateError" style="color:var(--accent);font-size:12px;margin:4px 0 0;display:none;"></p>
       <label style="margin-top:10px;">Русский перевод</label>
-      <input type="text" id="qaRu" placeholder="напр. дружба">
+      <div class="row" style="gap:8px;margin-bottom:0;">
+        <input type="text" id="qaRu" placeholder="напр. дружба" style="flex:1;">
+        <button class="act" id="qaTranslateRuBtn" style="flex:none;white-space:nowrap;">Перевести</button>
+      </div>
       <div class="row" style="margin-top:14px;">
         <button class="act primary" id="qaSubmitBtn" style="width:100%;">Добавить</button>
       </div>
@@ -855,12 +858,12 @@ document.getElementById('resetBtn').addEventListener('click', async ()=>{
 
 /* ---------- TRANSLATE ---------- */
 const TRANSLATE_KEY = 'AIzaSyApu0OIEHDe5j307JSVwVEmBvE4kVjDnWY';
-async function translateHuToRu(text){
+async function translate(text, source, target){
   const url = `https://translation.googleapis.com/language/translate/v2?key=${TRANSLATE_KEY}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ q: text, source: 'hu', target: 'ru', format: 'text' })
+    body: JSON.stringify({ q: text, source, target, format: 'text' })
   });
   if(!res.ok) throw new Error('Ошибка сети');
   const data = await res.json();
@@ -882,8 +885,22 @@ document.getElementById('qaTranslateBtn').addEventListener('click', async ()=>{
   const btn = document.getElementById('qaTranslateBtn');
   btn.disabled = true; btn.textContent = '…';
   try{
-    const ru = await translateHuToRu(hu);
-    document.getElementById('qaRu').value = ru;
+    document.getElementById('qaRu').value = await translate(hu, 'hu', 'ru');
+  } catch(e){
+    errEl.textContent = 'Не удалось перевести — проверьте интернет';
+    errEl.style.display = '';
+  }
+  btn.disabled = false; btn.textContent = 'Перевести';
+});
+document.getElementById('qaTranslateRuBtn').addEventListener('click', async ()=>{
+  const ru = document.getElementById('qaRu').value.trim();
+  const errEl = document.getElementById('qaTranslateError');
+  errEl.style.display = 'none';
+  if(!ru){ errEl.textContent = 'Сначала введите русское слово'; errEl.style.display = ''; return; }
+  const btn = document.getElementById('qaTranslateRuBtn');
+  btn.disabled = true; btn.textContent = '…';
+  try{
+    document.getElementById('qaHu').value = await translate(ru, 'ru', 'hu');
   } catch(e){
     errEl.textContent = 'Не удалось перевести — проверьте интернет';
     errEl.style.display = '';
