@@ -569,9 +569,21 @@ function renderStudy(){
   if(queue.length === 0){
     const isCustom = mode === 'custom';
     const noWords = isCustom && state.custom.length === 0;
-    cardArea.innerHTML = noWords
-      ? `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> в углу, чтобы добавить первое слово.</p></div>`
-      : `<div class="card done"><div class="big">Готово 👏</div><p>В работе ${activeCount} слов. ${isCustom ? 'Добавьте новые через ＋.' : 'Повторения появятся завтра.'}</p></div>`;
+    if(noWords){
+      cardArea.innerHTML = `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> в углу, чтобы добавить первое слово.</p></div>`;
+    } else {
+      cardArea.innerHTML = `<div class="card done"><div class="big">Готово 👏</div><p>В работе ${activeCount} слов. ${isCustom ? 'Добавьте новые через ＋.' : 'Повторения появятся завтра.'}</p><button class="know-link show" id="restudyBtn" style="margin-top:16px;">Учить заново</button></div>`;
+      document.getElementById('restudyBtn').addEventListener('click', async ()=>{
+        const today = todayStr();
+        (state.activeSet[setKey] || []).forEach(k => {
+          if(state.cards[k]) state.cards[k].due = today;
+        });
+        sessionReviewed = 0;
+        await saveState();
+        buildQueue();
+        renderStudy();
+      });
+    }
     return;
   }
 
