@@ -425,8 +425,8 @@ async function saveState(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
   catch(e){ console.error('localStorage save failed', e); }
   if(currentUser){
-    try{ await db.collection('users').doc(currentUser.uid).set({ state: state }); }
-    catch(e){ console.error('firestore save failed', e); }
+    db.collection('users').doc(currentUser.uid).set({ state: state })
+      .catch(e => console.error('firestore save failed', e));
   }
 }
 
