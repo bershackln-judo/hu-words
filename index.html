@@ -244,6 +244,14 @@
         <option value="core">Стартовое ядро (364)</option>
         <option value="full">Весь словарь (1698)</option>
       </select>
+      <label>Слов в активном наборе</label>
+      <select id="setActiveSetSize">
+        <option value="10">10 слов</option>
+        <option value="15">15 слов</option>
+        <option value="20">20 слов</option>
+        <option value="30">30 слов</option>
+        <option value="50">50 слов</option>
+      </select>
       <label>Направление перевода</label>
       <select id="setDirection">
         <option value="hu-ru">Венгерский → русский</option>
@@ -356,7 +364,8 @@ function uid(){ return 'c'+Date.now()+Math.random().toString(36).slice(2,7); }
 
 function defaultState(){
   return {
-    settings: { wordSet: 'core', direction: 'hu-ru', studyMode: 'dict' },
+    settings: { wordSet: 'core', direction: 'hu-ru', studyMode: 'dict', activeSetSize: 20 },
+    activeSet: { dict: [], custom: [] },
     decks: [],
     cards: {},
     learned: [],
@@ -374,6 +383,10 @@ function applyLoadedState(loaded){
   if(!Array.isArray(state.learned)) state.learned = [];
   if(!Array.isArray(state.decks)) state.decks = [];
   if(!state.settings.studyMode) state.settings.studyMode = 'dict';
+  if(!state.settings.activeSetSize) state.settings.activeSetSize = 20;
+  if(!state.activeSet || typeof state.activeSet !== 'object') state.activeSet = { dict: [], custom: [] };
+  if(!Array.isArray(state.activeSet.dict)) state.activeSet.dict = [];
+  if(!Array.isArray(state.activeSet.custom)) state.activeSet.custom = [];
   if(state.newIntroducedDate !== todayStr()){
     state.newIntroducedDate = todayStr();
     state.newIntroducedCount = 0;
@@ -424,13 +437,22 @@ function getAllWordsForBrowsing(){
   const custom = state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos: c.pos || 'сущ', custom:true }));
   return base.concat(custom);
 }
-function getStudyPool(){
-  if(state.settings.studyMode === 'custom'){
-    return state.custom
-      .filter(c => !state.learned.includes('custom:'+c.id))
-      .map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos:c.pos||'сущ', custom:true }));
+function getFullPool(mode){
+  if(mode === 'custom'){
+    return state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos:c.pos||'сущ', custom:true }));
   }
-  return getAllActiveWords().filter(w => !state.learned.includes(w.key));
+  return getAllActiveWords();
+}
+function fillActiveSet(mode){
+  const setKey = mode === 'custom' ? 'custom' : 'dict';
+  const maxSize = state.settings.activeSetSize || 20;
+  const poolKeys = new Set(getFullPool(mode).map(w => w.key));
+  state.activeSet[setKey] = state.activeSet[setKey].filter(k => poolKeys.has(k) && !state.learned.includes(k));
+  const inSet = new Set(state.activeSet[setKey]);
+  const available = getFullPool(mode).filter(w => !state.learned.includes(w.key) && !inSet.has(w.key));
+  while(state.activeSet[setKey].length < maxSize && available.length > 0){
+    state.activeSet[setKey].push(available.shift().key);
+  }
 }
 function findWord(key){
   return getAllWordsForBrowsing().find(w => w.key === key);
@@ -474,13 +496,16 @@ function gradeCard(key, g){
 }
 
 function buildQueue(){
+  const mode = state.settings.studyMode || 'dict';
+  const setKey = mode === 'custom' ? 'custom' : 'dict';
+  fillActiveSet(mode);
   const today = todayStr();
-  const pool = getStudyPool();
   const review = [], fresh = [];
-  for(const w of pool){
-    const c = state.cards[w.key];
-    if(c){ if(c.due <= today) review.push(w.key); }
-    else fresh.push(w.key);
+  for(const k of state.activeSet[setKey]){
+    if(state.learned.includes(k)) continue;
+    const c = state.cards[k];
+    if(c){ if(c.due <= today) review.push(k); }
+    else fresh.push(k);
   }
   queue = review.concat(fresh);
 }
@@ -524,17 +549,22 @@ let currentDir = 'hu-ru';
 
 function renderStudy(){
   const cardArea = document.getElementById('cardArea');
+  const mode = state.settings.studyMode || 'dict';
+  const setKey = mode === 'custom' ? 'custom' : 'dict';
+  const activeKeys = state.activeSet[setKey] || [];
+  const activeCount = activeKeys.filter(k => !state.learned.includes(k)).length;
+  const maxSize = state.settings.activeSetSize || 20;
   const total = queue.length + sessionReviewed;
-  document.getElementById('progressLabel').textContent = queue.length>0 ? 'Сегодня' : 'На сегодня всё пройдено';
+  document.getElementById('progressLabel').textContent = `В работе: ${activeCount}/${maxSize}`;
   document.getElementById('progressCount').textContent = total>0 ? sessionReviewed+' / '+total : '';
   document.getElementById('progressFill').style.width = total>0 ? Math.round(100*sessionReviewed/total)+'%' : '0%';
 
   if(queue.length === 0){
-    const isCustom = state.settings.studyMode === 'custom';
+    const isCustom = mode === 'custom';
     const noWords = isCustom && state.custom.length === 0;
     cardArea.innerHTML = noWords
       ? `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> в углу, чтобы добавить первое слово.</p></div>`
-      : `<div class="card done"><div class="big">Готово 👏</div><p>${isCustom ? 'Все свои слова пройдены — добавьте новые через ＋.' : 'Новые карточки и повторения появятся завтра.'}</p></div>`;
+      : `<div class="card done"><div class="big">Готово 👏</div><p>В работе ${activeCount} слов. ${isCustom ? 'Добавьте новые через ＋.' : 'Повторения появятся завтра.'}</p></div>`;
     return;
   }
 
@@ -590,6 +620,7 @@ function renderStudy(){
     e.stopPropagation();
     state.learned.push(key);
     queue.shift();
+    buildQueue();
     await saveState();
     renderStudy();
   });
@@ -658,7 +689,7 @@ function renderWordsList(){
     item.querySelectorAll('button').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         const act = btn.dataset.act;
-        if(act === 'learn-done'){ state.learned.push(key); }
+        if(act === 'learn-done'){ state.learned.push(key); buildQueue(); }
         if(act === 'restore-learned'){
           state.learned = state.learned.filter(k=>k!==key);
           const c = state.cards[key];
@@ -754,11 +785,15 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
 document.getElementById('gearBtn').addEventListener('click', ()=>{
   document.getElementById('setWordSet').value = state.settings.wordSet;
   document.getElementById('setDirection').value = state.settings.direction;
+  document.getElementById('setActiveSetSize').value = String(state.settings.activeSetSize || 20);
   document.getElementById('settingsOverlay').classList.remove('hidden');
+  renderAccountPanel();
 });
 document.getElementById('closeSettings').addEventListener('click', async ()=>{
   state.settings.wordSet = document.getElementById('setWordSet').value;
   state.settings.direction = document.getElementById('setDirection').value;
+  state.settings.activeSetSize = parseInt(document.getElementById('setActiveSetSize').value);
+  fillActiveSet(state.settings.studyMode || 'dict');
   await saveState();
   document.getElementById('settingsOverlay').classList.add('hidden');
   buildQueue(); sessionReviewed=0;
@@ -920,10 +955,12 @@ function renderAccountPanel(){
   });
 
   await loadState();
+  fillActiveSet(state.settings.studyMode || 'dict');
   buildQueue();
   renderQuickChips();
   renderStudy();
   renderAccountPanel();
+  await saveState();
 
   if(!currentUser){
     document.getElementById('authOverlay').classList.remove('hidden');
@@ -938,9 +975,11 @@ function renderAccountPanel(){
     if(user){
       document.getElementById('authOverlay').classList.add('hidden');
       await loadState();
+      fillActiveSet(state.settings.studyMode || 'dict');
       buildQueue(); sessionReviewed = 0;
       renderQuickChips();
       renderStudy();
+      await saveState();
     }
     renderAccountPanel();
   });
