@@ -199,20 +199,7 @@
   <!-- WORDS TAB -->
   <div id="tabWords" class="hidden">
     <div class="chiprow" id="wordFilterChips"></div>
-    <div class="chiprow" id="posFilterChips"></div>
     <div class="search-box"><input type="text" id="searchInput" placeholder="Поиск по венгерскому или русскому…"></div>
-
-    <div class="panel" id="addPanel">
-      <h3>Добавить своё слово</h3>
-      <label>Венгерский</label>
-      <input type="text" id="newHu" placeholder="напр. barátság">
-      <label>Русский перевод</label>
-      <input type="text" id="newRu" placeholder="напр. дружба">
-      <label>Тема (необязательно)</label>
-      <input type="text" id="newCat" placeholder="напр. Мои слова">
-      <div class="row"><button class="act primary" id="addWordBtn" style="flex:none; width:100%;">Добавить</button></div>
-    </div>
-
     <div id="wordsList"></div>
   </div>
 
@@ -527,20 +514,15 @@ function renderQuickChips(){
   const el = document.getElementById('quickChips');
   const mode = state.settings.studyMode || 'dict';
   const dirLabel = {'hu-ru':'HU→RU','ru-hu':'RU→HU','mixed':'Вперемешку'}[state.settings.direction];
-  const wordSetLabel = state.settings.wordSet === 'core' ? 'Ядро' : 'Все слова';
   let html = `<button class="chip ${mode==='dict'?'active':''}" data-act="mode-dict">Словарь</button>`
-    + `<button class="chip ${mode==='custom'?'active':''}" data-act="mode-custom">Мои слова</button>`;
-  if(mode === 'dict'){
-    html += `<button class="chip active" data-act="cyc-wordset">${wordSetLabel}</button>`;
-  }
-  html += `<button class="chip active" data-act="cyc-dir">${dirLabel}</button>`;
+    + `<button class="chip ${mode==='custom'?'active':''}" data-act="mode-custom">Мои слова</button>`
+    + `<button class="chip active" data-act="cyc-dir">${dirLabel}</button>`;
   el.innerHTML = html;
   el.querySelectorAll('.chip').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const act = btn.dataset.act;
       if(act==='mode-dict') state.settings.studyMode = 'dict';
       if(act==='mode-custom') state.settings.studyMode = 'custom';
-      if(act==='cyc-wordset') state.settings.wordSet = state.settings.wordSet==='core' ? 'full':'core';
       if(act==='cyc-dir'){
         const order=['hu-ru','ru-hu','mixed'];
         state.settings.direction = order[(order.indexOf(state.settings.direction)+1)%3];
@@ -651,25 +633,12 @@ const POS_LABELS = {
   'нареч':'Наречия', 'местоим':'Местоимения', 'числ':'Числительные', 'союз':'Союзы',
   'предлог':'Предлоги/послелоги', 'частица':'Частицы', 'служ':'Служебные', 'фраза':'Фразы'
 };
-let posFilter = 'все';
 
 function renderWordFilterChips(){
   const el = document.getElementById('wordFilterChips');
   const opts = [['all','Все'],['custom','Мои слова'],['learned',`Изучено (${state.learned.length})`]];
   el.innerHTML = opts.map(([v,l])=>`<button class="chip ${wordFilter===v?'active':''}" data-f="${v}">${l}</button>`).join('');
   el.querySelectorAll('.chip').forEach(b=>b.addEventListener('click', ()=>{ wordFilter=b.dataset.f; renderWordsTab(); }));
-}
-function renderPosFilterChips(){
-  const el = document.getElementById('posFilterChips');
-  const all = getAllWordsForBrowsing();
-  const counts = {};
-  all.forEach(w=>{ counts[w.pos] = (counts[w.pos]||0)+1; });
-  const order = ['все','сущ','гл','прил','нареч','местоим','числ','союз','предлог','частица','служ','фраза'];
-  el.innerHTML = order.filter(p => p==='все' || counts[p]).map(p=>{
-    const label = p==='все' ? POS_LABELS[p] : `${POS_LABELS[p]} (${counts[p]})`;
-    return `<button class="chip ${posFilter===p?'active':''}" data-p="${p}">${label}</button>`;
-  }).join('');
-  el.querySelectorAll('.chip').forEach(b=>b.addEventListener('click', ()=>{ posFilter=b.dataset.p; renderWordsList(); }));
 }
 function renderWordsList(){
   const list = document.getElementById('wordsList');
@@ -678,10 +647,7 @@ function renderWordsList(){
   if(wordFilter === 'custom') all = all.filter(w=>w.custom);
   if(wordFilter === 'learned') all = all.filter(w=>state.learned.includes(w.key));
   if(wordFilter === 'all') all = all.filter(w=>!state.learned.includes(w.key));
-  if(posFilter !== 'все') all = all.filter(w=>w.pos === posFilter);
   if(q) all = all.filter(w=> w.hu.toLowerCase().includes(q) || w.ru.toLowerCase().includes(q));
-
-  document.getElementById('addPanel').classList.toggle('hidden', wordFilter !== 'custom');
 
   if(all.length === 0){
     list.innerHTML = `<div class="empty-note">${wordFilter==='learned' ? 'Пока ничего не отмечено как изученное' : 'Ничего не найдено'}</div>`;
@@ -730,21 +696,9 @@ function renderWordsList(){
     });
   });
 }
-function renderWordsTab(){ renderWordFilterChips(); renderPosFilterChips(); renderWordsList(); }
+function renderWordsTab(){ renderWordFilterChips(); renderWordsList(); }
 
 document.getElementById('searchInput').addEventListener('input', renderWordsList);
-document.getElementById('addWordBtn').addEventListener('click', async ()=>{
-  const hu = document.getElementById('newHu').value.trim();
-  const ru = document.getElementById('newRu').value.trim();
-  const cat = document.getElementById('newCat').value.trim() || 'Мои слова';
-  if(!hu || !ru){ alert('Заполни венгерское слово и перевод'); return; }
-  state.custom.push({ id: uid(), hu, ru, cat });
-  await saveState();
-  document.getElementById('newHu').value=''; document.getElementById('newRu').value=''; document.getElementById('newCat').value='';
-  buildQueue();
-  wordFilter = 'custom';
-  renderWordsTab();
-});
 
 /* ---------- STATS TAB ---------- */
 function renderStats(){
