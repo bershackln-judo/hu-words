@@ -86,6 +86,8 @@
   .card.revealed .ru-word{ opacity:1; color:var(--text); }
   .tap-hint{ font-size:13px; color:var(--text-muted); margin-top:20px; }
   .card.revealed .tap-hint{ display:none; }
+  .speak-btn{ position:absolute; bottom:12px; right:14px; background:none; border:none; font-size:22px; cursor:pointer; opacity:0.5; padding:4px; line-height:1; }
+  .speak-btn:active{ opacity:1; }
 
   .buttons{ display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin-top:16px; opacity:0; pointer-events:none; transition:opacity .2s ease; }
   .buttons.show{ opacity:1; pointer-events:auto; }
@@ -504,6 +506,14 @@ function buildQueue(){
   queue = review.concat(fresh);
 }
 
+function speakHu(text){
+  if(!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = 'hu-HU';
+  window.speechSynthesis.speak(utt);
+}
+
 function pickDirection(){
   if(state.settings.direction === 'mixed') return Math.random() < 0.5 ? 'hu-ru' : 'ru-hu';
   return state.settings.direction;
@@ -584,6 +594,7 @@ function renderStudy(){
       <div class="underline"></div>
       <div class="ru-word">${escapeHtml(back)}</div>
       <div class="tap-hint">нажми, чтобы увидеть перевод</div>
+      <button class="speak-btn" id="speakBtn">🔊</button>
     </div>
     <div class="buttons" id="btnRow">
       <button class="btn-again" data-g="again">Снова<small>&lt;1м</small></button>
@@ -599,6 +610,10 @@ function renderStudy(){
     document.getElementById('cardEl').classList.add('revealed');
     document.getElementById('btnRow').classList.add('show');
     document.getElementById('knowLink').classList.add('show');
+  });
+  document.getElementById('speakBtn').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    speakHu(w.hu);
   });
   const c = state.cards[key];
   document.getElementById('goodIvl').textContent = fmtDays(previewInterval(c,'good'));
