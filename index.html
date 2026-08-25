@@ -544,7 +544,7 @@ function renderStudy(){
   const maxSize = state.settings.activeSetSize || 20;
   const total = queue.length + sessionReviewed;
   document.getElementById('progressLabel').textContent = `В работе: ${activeCount}/${maxSize}`;
-  document.getElementById('progressCount').textContent = total>0 ? sessionReviewed+' / '+total : '';
+  document.getElementById('progressCount').textContent = sessionReviewed > 0 ? 'Сегодня: ' + sessionReviewed : '';
   document.getElementById('progressFill').style.width = total>0 ? Math.round(100*sessionReviewed/total)+'%' : '0%';
 
   if(queue.length === 0){
