@@ -524,8 +524,7 @@ function renderQuickChips(){
       if(act==='mode-dict') state.settings.studyMode = 'dict';
       if(act==='mode-custom') state.settings.studyMode = 'custom';
       if(act==='cyc-dir'){
-        const order=['hu-ru','ru-hu','mixed'];
-        state.settings.direction = order[(order.indexOf(state.settings.direction)+1)%3];
+        state.settings.direction = state.settings.direction === 'hu-ru' ? 'ru-hu' : 'hu-ru';
       }
       await saveState();
       buildQueue(); sessionReviewed=0;
