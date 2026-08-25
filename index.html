@@ -543,9 +543,9 @@ function renderStudy(){
   const activeCount = activeKeys.filter(k => !state.learned.includes(k)).length;
   const maxSize = state.settings.activeSetSize || 20;
   const total = queue.length + sessionReviewed;
-  document.getElementById('progressLabel').textContent = `В работе: ${activeCount}/${maxSize}`;
-  document.getElementById('progressCount').textContent = sessionReviewed > 0 ? 'Сегодня: ' + sessionReviewed : '';
-  document.getElementById('progressFill').style.width = total>0 ? Math.round(100*sessionReviewed/total)+'%' : '0%';
+  document.getElementById('progressLabel').textContent = `В работе: ${activeCount}`;
+  document.getElementById('progressCount').textContent = '';
+  document.getElementById('progressFill').style.width = '0%';
 
   if(queue.length === 0){
     const isCustom = mode === 'custom';
