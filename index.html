@@ -657,7 +657,8 @@ const POS_LABELS = {
 
 function renderWordFilterChips(){
   const el = document.getElementById('wordFilterChips');
-  const opts = [['all','Все'],['custom','Мои слова'],['learned',`Изучено (${state.learned.length})`]];
+  const allCount = getAllWordsForBrowsing().filter(w=>!state.learned.includes(w.key)).length;
+  const opts = [[`all`,`Все (${allCount})`],['custom',`Мои слова (${state.custom.length})`],['learned',`Изучено (${state.learned.length})`]];
   el.innerHTML = opts.map(([v,l])=>`<button class="chip ${wordFilter===v?'active':''}" data-f="${v}">${l}</button>`).join('');
   el.querySelectorAll('.chip').forEach(b=>b.addEventListener('click', ()=>{ wordFilter=b.dataset.f; renderWordsTab(); }));
 }
