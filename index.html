@@ -364,6 +364,7 @@ let state = null;
 let queue = [];
 let sessionReviewed = 0;
 let revealed = false;
+let practiceMode = false;
 let currentTab = 'study';
 let wordFilter = 'all';
 
@@ -467,7 +468,9 @@ function fillActiveSet(mode){
   const poolKeys = new Set(getFullPool(mode).map(w => w.key));
   state.activeSet[setKey] = state.activeSet[setKey].filter(k => poolKeys.has(k) && !state.learned.includes(k));
   const inSet = new Set(state.activeSet[setKey]);
-  const available = getFullPool(mode).filter(w => !state.learned.includes(w.key) && !inSet.has(w.key));
+  const available = getFullPool(mode)
+    .filter(w => !state.learned.includes(w.key) && !inSet.has(w.key))
+    .sort((a, b) => (b.tier > 0 ? 1 : 0) - (a.tier > 0 ? 1 : 0));
   while(state.activeSet[setKey].length < maxSize && available.length > 0){
     state.activeSet[setKey].push(available.shift().key);
   }
@@ -492,6 +495,8 @@ function previewInterval(c, grade){
 }
 function fmtDays(n){ if(n<1) return '<1д'; if(n===1) return '1д'; if(n<30) return n+'д'; return Math.round(n/30)+'мес'; }
 
+const GRADUATE_IVL_DAYS = 21;
+
 function gradeCard(key, g){
   const today = todayStr();
   let c = state.cards[key];
@@ -511,9 +516,14 @@ function gradeCard(key, g){
   state.cards[key] = c;
   if(isNew) state.newIntroducedCount++;
   state.history[today] = (state.history[today]||0)+1;
+
+  const graduated = g !== 'again' && c.ivl >= GRADUATE_IVL_DAYS && !state.learned.includes(key);
+  if(graduated) state.learned.push(key);
+  return { graduated };
 }
 
 function buildQueue(){
+  practiceMode = false;
   const mode = state.settings.studyMode || 'dict';
   const setKey = mode === 'custom' ? 'custom' : 'dict';
   fillActiveSet(mode);
@@ -575,7 +585,7 @@ function renderStudy(){
   const activeCount = activeKeys.filter(k => !state.learned.includes(k)).length;
   const maxSize = state.settings.activeSetSize || 20;
   const total = queue.length + sessionReviewed;
-  document.getElementById('progressLabel').textContent = `В работе: ${activeCount}`;
+  document.getElementById('progressLabel').textContent = practiceMode ? '🔁 Практика — прогресс не меняется' : `В работе: ${activeCount}`;
   document.getElementById('progressCount').textContent = '';
   document.getElementById('progressFill').style.width = '0%';
 
@@ -585,15 +595,11 @@ function renderStudy(){
     if(noWords){
       cardArea.innerHTML = `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> в углу, чтобы добавить первое слово.</p></div>`;
     } else {
-      cardArea.innerHTML = `<div class="card done"><div class="big">Готово 👏</div><p>В работе ${activeCount} слов. ${isCustom ? 'Добавьте новые через ＋.' : 'Повторения появятся завтра.'}</p><button class="know-link show" id="restudyBtn" style="margin-top:16px;">Учить заново</button></div>`;
-      document.getElementById('restudyBtn').addEventListener('click', async ()=>{
-        const today = todayStr();
-        (state.activeSet[setKey] || []).forEach(k => {
-          if(state.cards[k]) state.cards[k].due = today;
-        });
+      cardArea.innerHTML = `<div class="card done"><div class="big">Готово 👏</div><p>В работе ${activeCount} слов. ${isCustom ? 'Добавьте новые через ＋.' : 'Повторения появятся завтра.'}</p><button class="know-link show" id="restudyBtn" style="margin-top:16px;">Позаниматься ещё раз<small style="display:block;font-size:11px;opacity:0.6;margin-top:2px;">прогресс не изменится</small></button></div>`;
+      document.getElementById('restudyBtn').addEventListener('click', ()=>{
+        practiceMode = true;
+        queue = (state.activeSet[setKey] || []).filter(k => !state.learned.includes(k));
         sessionReviewed = 0;
-        await saveState();
-        buildQueue();
         renderStudy();
       });
     }
@@ -643,9 +649,16 @@ function renderStudy(){
   document.querySelectorAll('#btnRow button').forEach(btn=>{
     btn.addEventListener('click', async (e)=>{
       e.stopPropagation();
-      gradeCard(key, btn.dataset.g);
+      if(practiceMode){
+        queue.shift();
+        renderStudy();
+        return;
+      }
+      const result = gradeCard(key, btn.dataset.g);
       queue.shift();
-      if(btn.dataset.g === 'again'){
+      if(result.graduated){
+        buildQueue();
+      } else if(btn.dataset.g === 'again'){
         const at = Math.min(queue.length, 3);
         queue.splice(at,0,key);
       } else sessionReviewed++;
