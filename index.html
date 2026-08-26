@@ -595,6 +595,7 @@ function renderStudy(){
     if(noWords){
       cardArea.innerHTML = `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> в углу, чтобы добавить первое слово.</p></div>`;
     } else {
+      practiceMode = false;
       cardArea.innerHTML = `<div class="card done"><div class="big">Готово 👏</div><p>В работе ${activeCount} слов. ${isCustom ? 'Добавьте новые через ＋.' : 'Повторения появятся завтра.'}</p><button class="know-link show" id="restudyBtn" style="margin-top:16px;">Позаниматься ещё раз<small style="display:block;font-size:11px;opacity:0.6;margin-top:2px;">прогресс не изменится</small></button></div>`;
       document.getElementById('restudyBtn').addEventListener('click', ()=>{
         practiceMode = true;
@@ -762,8 +763,9 @@ function openEditWord(key){
       const c = state.custom.find(c=>'custom:'+c.id===key);
       if(c){ c.hu = newHu; c.ru = newRu; }
     } else {
-      state.overrides_hu[w.key] = newHu;
-      state.overrides[w.key] = newRu;
+      const baseWord = BASE_WORDS.find(bw => bw[0] === w.key);
+      if(newHu !== w.key) state.overrides_hu[w.key] = newHu; else delete state.overrides_hu[w.key];
+      if(baseWord && newRu !== baseWord[1]) state.overrides[w.key] = newRu; else delete state.overrides[w.key];
     }
     overlay.classList.add('hidden');
     await saveState();
