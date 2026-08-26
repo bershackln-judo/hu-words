@@ -323,6 +323,19 @@
   </div>
 </div>
 
+<div class="overlay hidden" id="editWordOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="section-title" style="margin-top:0;" id="editWordTitle">Изменить слово</div>
+    <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:4px;">Венгерский</label>
+    <input id="editHuInput" type="text" placeholder="Венгерское слово" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:16px;color:var(--text);margin-bottom:14px;">
+    <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:4px;">Русский перевод</label>
+    <input id="editRuInput" type="text" placeholder="Русский перевод" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:16px;color:var(--text);margin-bottom:20px;">
+    <button id="editWordSaveBtn" class="act" style="width:100%;margin-bottom:10px;">Сохранить</button>
+    <button id="editWordCancelBtn" class="act" style="width:100%;background:none;color:var(--text-muted);">Отмена</button>
+  </div>
+</div>
+
 <div class="overlay hidden" id="wordPreviewOverlay">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -374,6 +387,7 @@ function defaultState(){
     learned: [],
     custom: [],
     overrides: {},
+    overrides_hu: {},
     history: {},
     newIntroducedDate: todayStr(),
     newIntroducedCount: 0
@@ -385,6 +399,7 @@ function applyLoadedState(loaded){
   state.settings = Object.assign(defaultState().settings, loaded.settings || {});
   if(!Array.isArray(state.learned)) state.learned = [];
   if(!Array.isArray(state.decks)) state.decks = [];
+  if(!state.overrides_hu) state.overrides_hu = {};
   if(!state.settings.studyMode) state.settings.studyMode = 'dict';
   if(!state.settings.activeSetSize) state.settings.activeSetSize = 20;
   if(!state.activeSet || typeof state.activeSet !== 'object') state.activeSet = { dict: [], custom: [] };
@@ -429,14 +444,14 @@ async function saveState(){
 function getAllActiveWords(){
   const base = BASE_WORDS
     .filter(w => state.settings.wordSet === 'full' || w[3] > 0)
-    .map(w => ({ key: w[0], hu: w[0], ru: state.overrides[w[0]] || w[1], cat: w[2], tier: w[3], pos: w[4] || 'сущ', custom:false }));
+    .map(w => ({ key: w[0], hu: state.overrides_hu[w[0]] || w[0], ru: state.overrides[w[0]] || w[1], cat: w[2], tier: w[3], pos: w[4] || 'сущ', custom:false }));
   const custom = state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos: c.pos || 'сущ', custom:true }));
   return base.concat(custom);
 }
 function getAllWordsForBrowsing(){
   // Всегда весь словарь — вкладка "Слова" не должна зависеть от выбора Ядро/Весь словарь для занятий
   const base = BASE_WORDS
-    .map(w => ({ key: w[0], hu: w[0], ru: state.overrides[w[0]] || w[1], cat: w[2], tier: w[3], pos: w[4] || 'сущ', custom:false }));
+    .map(w => ({ key: w[0], hu: state.overrides_hu[w[0]] || w[0], ru: state.overrides[w[0]] || w[1], cat: w[2], tier: w[3], pos: w[4] || 'сущ', custom:false }));
   const custom = state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos: c.pos || 'сущ', custom:true }));
   return base.concat(custom);
 }
@@ -703,14 +718,7 @@ function renderWordsList(){
           if(c){ c.ivl = 1; c.reps = 0; c.due = todayStr(); }
         }
         if(act === 'delete'){ state.custom = state.custom.filter(c=>'custom:'+c.id !== key); }
-        if(act === 'edit'){
-          const w = findWord(key);
-          const nv = prompt('Новый перевод для «'+w.hu+'»:', w.ru);
-          if(nv !== null && nv.trim()){
-            if(w.custom){ const c = state.custom.find(c=>'custom:'+c.id===key); if(c) c.ru = nv.trim(); }
-            else state.overrides[w.hu] = nv.trim();
-          }
-        }
+        if(act === 'edit'){ openEditWord(key); return; }
         await saveState();
         buildQueue();
         renderWordsTab();
@@ -723,6 +731,37 @@ function renderWordsList(){
   });
 }
 function renderWordsTab(){ renderWordFilterChips(); renderWordsList(); }
+
+function openEditWord(key){
+  const w = findWord(key);
+  if(!w) return;
+  document.getElementById('editWordTitle').textContent = 'Изменить слово';
+  document.getElementById('editHuInput').value = w.hu;
+  document.getElementById('editRuInput').value = w.ru;
+  const overlay = document.getElementById('editWordOverlay');
+  overlay.classList.remove('hidden');
+
+  document.getElementById('editWordSaveBtn').onclick = async ()=>{
+    const newHu = document.getElementById('editHuInput').value.trim();
+    const newRu = document.getElementById('editRuInput').value.trim();
+    if(!newHu || !newRu) return;
+    if(w.custom){
+      const c = state.custom.find(c=>'custom:'+c.id===key);
+      if(c){ c.hu = newHu; c.ru = newRu; }
+    } else {
+      state.overrides_hu[w.key] = newHu;
+      state.overrides[w.key] = newRu;
+    }
+    overlay.classList.add('hidden');
+    await saveState();
+    buildQueue();
+    renderWordsTab();
+  };
+  document.getElementById('editWordCancelBtn').onclick = ()=> overlay.classList.add('hidden');
+}
+document.getElementById('editWordOverlay').addEventListener('click', e=>{
+  if(e.target.id === 'editWordOverlay') document.getElementById('editWordOverlay').classList.add('hidden');
+});
 
 function openWordPreview(key){
   const w = findWord(key);
