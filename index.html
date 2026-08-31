@@ -579,14 +579,29 @@ function getFullPool(mode){
   }
   return getAllActiveWords();
 }
+/* Слово занимает место в активном наборе, пока не устоялось. Как только
+   интервал дорос до LEARNING_IVL_DAYS, оно выходит из проработки: слот
+   освобождается под новое слово, а само оно продолжает приходить на
+   повторения по своему сроку (см. buildQueue). Без этого набор из 20 слов
+   стоял замороженным почти месяц — до порога автовыпуска в 21 день. */
+const LEARNING_IVL_DAYS = 7;
+
+function inLearning(key){
+  const c = state.cards[key];
+  return !c || c.ivl < LEARNING_IVL_DAYS;
+}
+
 function fillActiveSet(mode){
   const setKey = mode === 'custom' ? 'custom' : 'dict';
   const maxSize = state.settings.activeSetSize || 20;
   const poolKeys = new Set(getFullPool(mode).map(w => w.key));
-  state.activeSet[setKey] = state.activeSet[setKey].filter(k => poolKeys.has(k) && !isLearned(k));
+  state.activeSet[setKey] = state.activeSet[setKey]
+    .filter(k => poolKeys.has(k) && !isLearned(k) && inLearning(k));
   const inSet = new Set(state.activeSet[setKey]);
+  // добираем только по-настоящему новые слова — те, что уже на повторениях,
+  // обратно в проработку не тянем; ядро (tier > 0) идёт первым
   const available = getFullPool(mode)
-    .filter(w => !isLearned(w.key) && !inSet.has(w.key))
+    .filter(w => !isLearned(w.key) && !inSet.has(w.key) && !state.cards[w.key])
     .sort((a, b) => (b.tier > 0 ? 1 : 0) - (a.tier > 0 ? 1 : 0));
   while(state.activeSet[setKey].length < maxSize && available.length > 0){
     state.activeSet[setKey].push(available.shift().key);
@@ -610,7 +625,13 @@ function previewInterval(c, grade){
     return Math.round((c.ivl||1) * ease * 1.3);
   }
 }
-function previewHard(c){ return Math.max(1, Math.round(((c && c.ivl) || 1) * 1.2)); }
+/* «Трудно» обязано увеличивать интервал хотя бы на день. Формула round(ivl*1.2)
+   при ivl=1 даёт round(1.2)=1 — единица переходит сама в себя, и карточка
+   возвращается каждый день бесконечно. То же при ivl=2 (round(2.4)=2). */
+function previewHard(c){
+  const ivl = (c && c.ivl) || 0;
+  return Math.max(ivl + 1, Math.round((ivl || 1) * 1.2));
+}
 function fmtDays(n){ if(n<1) return '<1д'; if(n===1) return '1д'; if(n<30) return n+'д'; return Math.round(n/30)+'мес'; }
 
 const GRADUATE_IVL_DAYS = 21;
@@ -625,7 +646,7 @@ function gradeCard(key, g){
     c.reps = 0; c.ease = Math.max(1.3, c.ease-0.2); c.ivl = 0; c.due = today;
   } else {
     let ivl;
-    if(g === 'hard'){ ivl = Math.max(1, Math.round((c.ivl||1)*1.2)); c.ease = Math.max(1.3, c.ease-0.15); }
+    if(g === 'hard'){ ivl = previewHard(c); c.ease = Math.max(1.3, c.ease-0.15); }
     else if(g === 'good'){ ivl = previewInterval(c,'good'); }
     else { ivl = previewInterval(c,'easy'); c.ease = c.ease+0.15; }
     c.ivl = ivl; c.reps = (c.reps||0)+1;
@@ -640,19 +661,29 @@ function gradeCard(key, g){
   return { graduated };
 }
 
+/* Повторения берутся из ВСЕГО пула по сроку, а не только из активного набора.
+   Иначе слово, вышедшее из проработки, больше никогда бы не показалось.
+   Новые слова — только из активного набора, он и ограничивает их приток. */
 function buildQueue(){
   practiceMode = false;
   const mode = state.settings.studyMode || 'dict';
   const setKey = mode === 'custom' ? 'custom' : 'dict';
   fillActiveSet(mode);
   const today = todayStr();
-  const review = [], fresh = [];
+
+  const review = [];
+  for(const w of getFullPool(mode)){
+    if(isLearned(w.key)) continue;
+    const c = state.cards[w.key];
+    if(c && c.due <= today) review.push(w.key);
+  }
+
+  const fresh = [];
   for(const k of state.activeSet[setKey]){
     if(isLearned(k)) continue;
-    const c = state.cards[k];
-    if(c){ if(c.due <= today) review.push(k); }
-    else fresh.push(k);
+    if(!state.cards[k]) fresh.push(k);
   }
+
   queue = review.concat(fresh);
 }
 
@@ -711,7 +742,7 @@ function renderStudy(){
   const total = queue.length + sessionReviewed;
   const pct = total > 0 ? Math.round(100 * doneNow / total) : 100;
 
-  document.getElementById('progressLabel').textContent = practiceMode ? '🔁 Практика — прогресс не меняется' : `В работе: ${activeCount}`;
+  document.getElementById('progressLabel').textContent = practiceMode ? '🔁 Практика — прогресс не меняется' : `В проработке: ${activeCount}`;
   document.getElementById('progressCount').textContent = total > 0 ? `Сегодня: ${doneNow} / ${total}` : 'Сегодня: всё пройдено';
   document.getElementById('progressFill').style.width = pct + '%';
 
@@ -724,7 +755,7 @@ function renderStudy(){
       cardArea.innerHTML = `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> в углу, чтобы добавить первое слово.</p></div>`;
     } else {
       practiceMode = false;
-      cardArea.innerHTML = `<div class="card done"><div class="big">Готово 👏</div><p>В работе ${activeCount} слов. ${isCustom ? 'Добавьте новые через ＋.' : 'Повторения появятся завтра.'}</p><button class="know-link show" id="restudyBtn" style="margin-top:16px;">Позаниматься ещё раз<small style="display:block;font-size:11px;opacity:0.6;margin-top:2px;">прогресс не изменится</small></button></div>`;
+      cardArea.innerHTML = `<div class="card done"><div class="big">Готово 👏</div><p>В проработке ${activeCount} слов. ${isCustom ? 'Добавьте новые через ＋.' : 'Следующие повторения — по срокам карточек.'}</p><button class="know-link show" id="restudyBtn" style="margin-top:16px;">Позаниматься ещё раз<small style="display:block;font-size:11px;opacity:0.6;margin-top:2px;">прогресс не изменится</small></button></div>`;
       document.getElementById('restudyBtn').addEventListener('click', ()=>{
         practiceMode = true;
         queue = (state.activeSet[setKey] || []).filter(k => !isLearned(k));
