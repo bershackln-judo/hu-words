@@ -702,15 +702,25 @@ function renderStudy(){
   const activeKeys = state.activeSet[setKey] || [];
   const activeCount = activeKeys.filter(k => !isLearned(k)).length;
   const maxSize = state.settings.activeSetSize || 20;
+
+  /* Прогресс текущего захода: сколько карточек из сегодняшней очереди уже
+     пройдено. sessionReviewed живёт только в памяти, поэтому счётчик начинается
+     заново при каждом открытии приложения — как и просил пользователь.
+     «Снова» прогресс не двигает: карточка возвращается в очередь. */
+  const doneNow = sessionReviewed;
   const total = queue.length + sessionReviewed;
+  const pct = total > 0 ? Math.round(100 * doneNow / total) : 100;
+
   document.getElementById('progressLabel').textContent = practiceMode ? '🔁 Практика — прогресс не меняется' : `В работе: ${activeCount}`;
-  document.getElementById('progressCount').textContent = '';
-  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressCount').textContent = total > 0 ? `Сегодня: ${doneNow} / ${total}` : 'Сегодня: всё пройдено';
+  document.getElementById('progressFill').style.width = pct + '%';
 
   if(queue.length === 0){
     const isCustom = mode === 'custom';
     const noWords = isCustom && state.custom.length === 0;
     if(noWords){
+      document.getElementById('progressFill').style.width = '0%';
+      document.getElementById('progressCount').textContent = '';
       cardArea.innerHTML = `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> в углу, чтобы добавить первое слово.</p></div>`;
     } else {
       practiceMode = false;
@@ -771,17 +781,20 @@ function renderStudy(){
       e.stopPropagation();
       if(practiceMode){
         queue.shift();
+        sessionReviewed++;          // в практике шкала тоже должна двигаться
         renderStudy();
         return;
       }
       const result = gradeCard(key, btn.dataset.g);
       queue.shift();
-      if(result.graduated){
-        buildQueue();
-      } else if(btn.dataset.g === 'again'){
+      if(btn.dataset.g === 'again'){
+        // карточка возвращается в очередь — заход не продвинулся
         const at = Math.min(queue.length, 3);
         queue.splice(at,0,key);
-      } else sessionReviewed++;
+      } else {
+        sessionReviewed++;
+        if(result.graduated) buildQueue();
+      }
       await saveState();
       renderStudy(); renderQuickChips();
     });
@@ -790,6 +803,7 @@ function renderStudy(){
     e.stopPropagation();
     markLearned(key);
     queue.shift();
+    sessionReviewed++;
     buildQueue();
     await saveState();
     renderStudy();
