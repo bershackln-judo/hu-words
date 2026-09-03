@@ -172,6 +172,9 @@
   }
   nav.tabs button .ic{ font-size:19px; }
   nav.tabs button.active{ color:var(--accent); }
+  /* ＋ в нижней панели — действие, а не вкладка: цвет не зависит от .active */
+  nav.tabs button.add{ color:var(--accent); }
+  nav.tabs button.add .ic{ font-size:22px; font-weight:300; line-height:19px; }
 
   .overlay{ position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:20; display:flex; align-items:flex-end; }
   .sheet{ background:var(--bg); border-radius:18px 18px 0 0; width:100%; max-height:85vh; overflow-y:auto; padding: 20px 16px calc(var(--safe-bottom) + 20px); }
@@ -241,6 +244,7 @@
   <button data-tab="study" class="active"><span class="ic">📇</span>Учить</button>
   <button data-tab="words"><span class="ic">📚</span>Слова</button>
   <button data-tab="stats"><span class="ic">📊</span>Статистика</button>
+  <button class="add" id="navAddBtn" aria-label="Добавить слово"><span class="ic">＋</span>Добавить</button>
 </nav>
 
 <div class="overlay hidden" id="settingsOverlay">
@@ -748,10 +752,10 @@ function renderStudy(){
     const noWords = isCustom && state.custom.length === 0;
     if(noWords){
       document.getElementById('progressCount').textContent = '';
-      cardArea.innerHTML = `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> в углу, чтобы добавить первое слово.</p></div>`;
+      cardArea.innerHTML = `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> внизу, чтобы добавить первое слово.</p></div>`;
     } else {
       practiceMode = false;
-      cardArea.innerHTML = `<div class="card done"><div class="big">Готово 👏</div><p>В проработке ${activeCount} слов. ${isCustom ? 'Добавьте новые через ＋.' : 'Следующие повторения — по срокам карточек.'}</p><button class="know-link show" id="restudyBtn" style="margin-top:16px;">Позаниматься ещё раз<small style="display:block;font-size:11px;opacity:0.6;margin-top:2px;">прогресс не изменится</small></button></div>`;
+      cardArea.innerHTML = `<div class="card done"><div class="big">Готово 👏</div><p>В проработке ${activeCount} слов. ${isCustom ? 'Добавьте новые через ＋ внизу.' : 'Следующие повторения — по срокам карточек.'}</p><button class="know-link show" id="restudyBtn" style="margin-top:16px;">Позаниматься ещё раз<small style="display:block;font-size:11px;opacity:0.6;margin-top:2px;">прогресс не изменится</small></button></div>`;
       document.getElementById('restudyBtn').addEventListener('click', ()=>{
         practiceMode = true;
         queue = (state.activeSet[setKey] || []).filter(k => !isLearned(k));
@@ -1020,9 +1024,9 @@ function renderStats(){
 }
 
 /* ---------- NAV ---------- */
-document.querySelectorAll('nav.tabs button').forEach(btn=>{
+document.querySelectorAll('nav.tabs button[data-tab]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
-    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('nav.tabs button[data-tab]').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     currentTab = btn.dataset.tab;
     document.getElementById('tabStudy').classList.toggle('hidden', currentTab!=='study');
@@ -1128,12 +1132,16 @@ function decodeEntities(s){
 }
 
 /* ---------- QUICK ADD WORD ---------- */
-document.getElementById('quickAddBtn').addEventListener('click', ()=>{
+/* Две кнопки ＋ (в шапке и в нижней панели) открывают одну и ту же шторку —
+   нижняя нужна, чтобы не проматывать список слов наверх ради добавления */
+function openQuickAdd(){
   document.getElementById('qaHu').value = '';
   document.getElementById('qaRu').value = '';
   document.getElementById('quickAddOverlay').classList.remove('hidden');
   setTimeout(()=> document.getElementById('qaHu').focus(), 100);
-});
+}
+document.getElementById('quickAddBtn').addEventListener('click', openQuickAdd);
+document.getElementById('navAddBtn').addEventListener('click', openQuickAdd);
 document.getElementById('qaTranslateBtn').addEventListener('click', async ()=>{
   const hu = document.getElementById('qaHu').value.trim();
   const errEl = document.getElementById('qaTranslateError');
