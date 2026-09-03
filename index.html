@@ -569,11 +569,15 @@ function getAllWordsForBrowsing(){
   const custom = state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos: c.pos || 'сущ', custom:true }));
   return base.concat(custom);
 }
+/* Два режима занятий не пересекаются: «Словарь» — только встроенные слова,
+   «Мои слова» — только добавленные вручную. Раньше ветка dict возвращала
+   getAllActiveWords(), то есть базу ВМЕСТЕ со своими словами, и свои слова
+   приходили в обычных занятиях. Не возвращать это обратно. */
 function getFullPool(mode){
   if(mode === 'custom'){
     return state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos:c.pos||'сущ', custom:true }));
   }
-  return getAllActiveWords();
+  return getAllActiveWords().filter(w => !w.custom);
 }
 /* Слово занимает место в активном наборе, пока не устоялось. Как только
    интервал дорос до LEARNING_IVL_DAYS, оно выходит из проработки: слот
@@ -974,7 +978,9 @@ document.getElementById('searchInput').addEventListener('input', ()=>{ wordsShow
 
 /* ---------- STATS TAB ---------- */
 function renderStats(){
-  const active = getAllActiveWords();
+  // тот же пул, что и в занятии: в режиме «Словарь» свои слова не считаются,
+  // в режиме «Мои слова» — только они. Иначе «слов в наборе» не сходится
+  const active = getFullPool(state.settings.studyMode || 'dict');
   const total = active.length;
   const learned = active.filter(w=>isLearned(w.key)).length;
   // считаем в границах выбранного набора, иначе «начато» включает слова,
