@@ -207,7 +207,6 @@
   <header>
     <div class="title"><em>Magyar</em> szavak</div>
     <div style="display:flex;gap:8px;">
-      <button class="icon-btn" id="quickAddBtn" aria-label="Добавить слово" title="Добавить слово" style="font-size:22px;font-weight:300;">＋</button>
       <button class="icon-btn" id="gearBtn" aria-label="Настройки">⚙</button>
     </div>
   </header>
@@ -1132,15 +1131,15 @@ function decodeEntities(s){
 }
 
 /* ---------- QUICK ADD WORD ---------- */
-/* Две кнопки ＋ (в шапке и в нижней панели) открывают одну и ту же шторку —
-   нижняя нужна, чтобы не проматывать список слов наверх ради добавления */
+/* ＋ живёт только в нижней панели: в шапке была вторая такая же кнопка,
+   убрана как дубль. Из нижней панели слово добавляется с любого экрана,
+   не проматывая список наверх */
 function openQuickAdd(){
   document.getElementById('qaHu').value = '';
   document.getElementById('qaRu').value = '';
   document.getElementById('quickAddOverlay').classList.remove('hidden');
   setTimeout(()=> document.getElementById('qaHu').focus(), 100);
 }
-document.getElementById('quickAddBtn').addEventListener('click', openQuickAdd);
 document.getElementById('navAddBtn').addEventListener('click', openQuickAdd);
 document.getElementById('qaTranslateBtn').addEventListener('click', async ()=>{
   const hu = document.getElementById('qaHu').value.trim();
