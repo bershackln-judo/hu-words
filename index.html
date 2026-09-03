@@ -63,9 +63,7 @@
   .chip.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
 
   /* progress */
-  .progress-row{ display:flex; justify-content:space-between; font-size:13px; color:var(--text-muted); margin-bottom:6px; }
-  .progress-bar{ width:100%; height:6px; background:var(--surface-2); border-radius:4px; overflow:hidden; margin-bottom:18px; }
-  .progress-fill{ height:100%; background:var(--accent); transition:width .3s ease; }
+  .progress-row{ display:flex; justify-content:space-between; font-size:13px; color:var(--text-muted); margin-bottom:18px; }
 
   /* card */
   .card{
@@ -217,7 +215,6 @@
   <div id="tabStudy">
     <div class="chiprow" id="quickChips"></div>
     <div class="progress-row"><span id="progressLabel"></span><span id="progressCount"></span></div>
-    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
     <div id="cardArea"></div>
   </div>
 
@@ -434,7 +431,6 @@ function isLearned(key){ return learnedSet.has(key); }
 function markLearned(key){ if(!learnedSet.has(key)){ state.learned.push(key); learnedSet.add(key); } }
 function unmarkLearned(key){ state.learned = state.learned.filter(k => k !== key); learnedSet.delete(key); }
 let queue = [];
-let sessionReviewed = 0;
 let revealed = false;
 let practiceMode = false;
 let currentTab = 'study';
@@ -718,7 +714,7 @@ function renderQuickChips(){
         state.settings.direction = state.settings.direction === 'hu-ru' ? 'ru-hu' : 'hu-ru';
       }
       await saveState();
-      buildQueue(); sessionReviewed=0;
+      buildQueue();
       renderQuickChips(); renderStudy();
     });
   });
@@ -734,23 +730,19 @@ function renderStudy(){
   const activeCount = activeKeys.filter(k => !isLearned(k)).length;
   const maxSize = state.settings.activeSetSize || 20;
 
-  /* Прогресс текущего захода: сколько карточек из сегодняшней очереди уже
-     пройдено. sessionReviewed живёт только в памяти, поэтому счётчик начинается
-     заново при каждом открытии приложения — как и просил пользователь.
-     «Снова» прогресс не двигает: карточка возвращается в очередь. */
-  const doneNow = sessionReviewed;
-  const total = queue.length + sessionReviewed;
-  const pct = total > 0 ? Math.round(100 * doneNow / total) : 100;
-
+  /* Как в Anki: показываем только сколько карточек осталось в очереди — число
+     убывает и всегда правда. Дроби «сделано / всего» здесь быть не может:
+     очередь пересобирается по ходу занятия (buildQueue вызывается при возврате
+     на вкладку «Учить», при «Изучено» и при выпуске слова), поэтому любой
+     знаменатель начинает врать через минуту. Так это и выглядело: «9 / 9»
+     превращалось в «15 / 16». */
   document.getElementById('progressLabel').textContent = practiceMode ? '🔁 Практика — прогресс не меняется' : `В проработке: ${activeCount}`;
-  document.getElementById('progressCount').textContent = total > 0 ? `Сегодня: ${doneNow} / ${total}` : 'Сегодня: всё пройдено';
-  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressCount').textContent = queue.length > 0 ? `Осталось: ${queue.length}` : '';
 
   if(queue.length === 0){
     const isCustom = mode === 'custom';
     const noWords = isCustom && state.custom.length === 0;
     if(noWords){
-      document.getElementById('progressFill').style.width = '0%';
       document.getElementById('progressCount').textContent = '';
       cardArea.innerHTML = `<div class="card done"><div class="big">Пусто</div><p>Нажмите <b>＋</b> в углу, чтобы добавить первое слово.</p></div>`;
     } else {
@@ -759,7 +751,6 @@ function renderStudy(){
       document.getElementById('restudyBtn').addEventListener('click', ()=>{
         practiceMode = true;
         queue = (state.activeSet[setKey] || []).filter(k => !isLearned(k));
-        sessionReviewed = 0;
         renderStudy();
       });
     }
@@ -812,7 +803,6 @@ function renderStudy(){
       e.stopPropagation();
       if(practiceMode){
         queue.shift();
-        sessionReviewed++;          // в практике шкала тоже должна двигаться
         renderStudy();
         return;
       }
@@ -823,7 +813,6 @@ function renderStudy(){
         const at = Math.min(queue.length, 3);
         queue.splice(at,0,key);
       } else {
-        sessionReviewed++;
         if(result.graduated) buildQueue();
       }
       await saveState();
@@ -834,7 +823,6 @@ function renderStudy(){
     e.stopPropagation();
     markLearned(key);
     queue.shift();
-    sessionReviewed++;
     buildQueue();
     await saveState();
     renderStudy();
@@ -1059,7 +1047,7 @@ document.getElementById('closeSettings').addEventListener('click', async ()=>{
   fillActiveSet(state.settings.studyMode || 'dict');
   await saveState();
   document.getElementById('settingsOverlay').classList.add('hidden');
-  buildQueue(); sessionReviewed=0;
+  buildQueue();
   renderQuickChips(); renderStudy();
 });
 document.getElementById('settingsOverlay').addEventListener('click', (e)=>{
@@ -1092,7 +1080,7 @@ document.getElementById('importFile').addEventListener('change', (e)=>{
     applyLoadedState(loaded);   // та же нормализация, что и при обычной загрузке
     fillActiveSet(state.settings.studyMode || 'dict');
     saveState();
-    buildQueue(); sessionReviewed = 0;
+    buildQueue();
     wordsShown = PAGE_SIZE;
     document.getElementById('settingsOverlay').classList.add('hidden');
     renderQuickChips(); renderStudy();
@@ -1107,7 +1095,7 @@ document.getElementById('resetBtn').addEventListener('click', async ()=>{
     rebuildLearnedSet();
     wordsShown = PAGE_SIZE;
     saveState();
-    buildQueue(); sessionReviewed=0;
+    buildQueue();
     renderQuickChips(); renderStudy();
     document.getElementById('settingsOverlay').classList.add('hidden');
   }
@@ -1178,7 +1166,7 @@ document.getElementById('qaSubmitBtn').addEventListener('click', async ()=>{
   state.settings.studyMode = 'custom';
   await saveState();
   document.getElementById('quickAddOverlay').classList.add('hidden');
-  buildQueue(); sessionReviewed = 0;
+  buildQueue();
   renderQuickChips(); renderStudy();
 });
 document.getElementById('quickAddOverlay').addEventListener('click', e => {
@@ -1339,7 +1327,7 @@ function registerServiceWorker(){
       if(changed){
         await loadCloudState();
         fillActiveSet(state.settings.studyMode || 'dict');
-        buildQueue(); sessionReviewed = 0;
+        buildQueue();
         wordsShown = PAGE_SIZE;
         renderQuickChips();
         renderStudy();
