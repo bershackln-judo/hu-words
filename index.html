@@ -107,21 +107,39 @@
   .done .big{ font-family:Georgia,serif; font-size:24px; margin-bottom:8px; }
   .done p{ color:var(--text-muted); font-size:14px; line-height:1.5; }
 
-  .stats-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin: 10px 0 24px; }
-  .stat-box{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 6px; text-align:center; }
-  .stat-box .n{ font-family:Georgia,serif; font-size:20px; display:block; }
-  .stat-box .l{ font-size:10.5px; color:var(--text-muted); margin-top:2px; }
+  /* СТАТИСТИКА. Раньше здесь были три плитки (в наборе / начато / изучено),
+     они считались по-разному и пересекались — из них нельзя было понять,
+     сколько слов осталось. Теперь одна полоса: изучено + в работе + впереди
+     всегда дают ровно весь набор. Разбивку по темам убрали: нажать на тему
+     нельзя (фильтра по темам в приложении нет), значит она ни к чему не ведёт */
+  .sum-line{ font-family:Georgia,serif; font-size:15.5px; color:var(--text); margin:10px 0 12px; }
+  .sum-line b{ font-size:27px; }
+  .stack{ display:flex; height:12px; border-radius:6px; overflow:hidden; background:var(--surface-2); }
+  .stack i{ display:block; }
+  .stack .s-learned{ background:var(--good); }
+  .stack .s-work{ background:var(--amber); }
+  .stack-legend{ display:flex; gap:16px; margin-top:11px; font-size:12.5px; color:var(--text-muted); flex-wrap:wrap; }
+  .stack-legend d{ width:8px; height:8px; border-radius:2px; display:inline-block; margin-right:6px; }
+  .stack-legend b{ color:var(--text); font-weight:500; }
 
-  .chart{ display:flex; align-items:flex-end; gap:4px; height:90px; margin-bottom:6px; }
-  .chart .bar{ flex:1; background:var(--surface-3); border-radius:3px 3px 0 0; position:relative; min-height:2px; }
-  .chart .bar.today{ background:var(--accent); }
-  .chart-labels{ display:flex; gap:4px; font-size:9px; color:var(--text-muted); margin-bottom:20px; }
-  .chart-labels span{ flex:1; text-align:center; }
+  .stat-row{ background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:14px 15px; margin-bottom:10px; display:flex; align-items:center; gap:13px; }
+  .stat-row svg{ width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.6;
+    stroke-linecap:round; stroke-linejoin:round; color:var(--accent); flex:none; }
+  .stat-row .t{ font-size:14px; color:var(--text); }
+  .stat-row .t small{ display:block; font-size:12px; color:var(--text-muted); margin-top:2px; }
+  .stat-row .n{ margin-left:auto; font-family:Georgia,serif; font-size:22px; color:var(--text); }
 
-  .cat-row{ display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:14px; }
-  .cat-row .bar-bg{ flex:1; height:6px; background:var(--surface-2); border-radius:3px; margin:0 10px; overflow:hidden; }
-  .cat-row .bar-fill{ height:100%; background:var(--good); }
-  .cat-row .cnt{ font-size:12px; color:var(--text-muted); white-space:nowrap; }
+  .chart{ display:flex; align-items:flex-end; gap:7px; height:96px; }
+  .chart > div{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:5px; }
+  /* align-self:stretch обязателен: иначе колонка с align-items:center ужимает
+     столбик по ширине контента, то есть в ноль, и график пропадает */
+  .chart .bar{ align-self:stretch; background:var(--surface-3); border-radius:4px 4px 0 0; min-height:3px; }
+  .chart .today .bar{ background:var(--accent); }
+  .chart .v{ font-size:11px; color:var(--text-muted); }
+  .chart .today .v{ color:var(--accent); }
+  .chart-labels{ display:flex; gap:7px; margin-top:7px; }
+  .chart-labels span{ flex:1; text-align:center; font-size:11px; color:var(--text-muted); }
 
   /* panels / forms */
   .panel{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:16px; }
@@ -236,12 +254,13 @@
 
   <!-- STATS TAB -->
   <div id="tabStats" class="hidden">
-    <div class="stats-grid" id="statsGrid"></div>
-    <div class="section-title">Повторения за 14 дней</div>
+    <div class="section-title">Словарь</div>
+    <div id="statsSummary"></div>
+    <div class="section-title">Занятия</div>
+    <div id="statsRows"></div>
+    <div class="section-title">Повторения за неделю</div>
     <div class="chart" id="chart"></div>
     <div class="chart-labels" id="chartLabels"></div>
-    <div class="section-title">По темам</div>
-    <div id="catBreakdown"></div>
   </div>
 
 </div>
@@ -989,44 +1008,78 @@ document.getElementById('searchInput').addEventListener('input', ()=>{ wordsShow
 /* ---------- STATS TAB ---------- */
 function renderStats(){
   // тот же пул, что и в занятии: в режиме «Словарь» свои слова не считаются,
-  // в режиме «Мои слова» — только они. Иначе «слов в наборе» не сходится
-  const active = getFullPool(state.settings.studyMode || 'dict');
-  const total = active.length;
-  const learned = active.filter(w=>isLearned(w.key)).length;
-  // считаем в границах выбранного набора, иначе «начато» включает слова,
-  // которых сейчас в наборе вообще нет, и три числа перестают биться друг с другом
-  const started = active.filter(w=>state.cards[w.key]).length;
+  // в режиме «Мои слова» — только они
+  const pool = getFullPool(state.settings.studyMode || 'dict');
+  const total = pool.length;
+  // три части в сумме дают весь набор — иначе числа снова начнут спорить
+  const learned = pool.filter(w => isLearned(w.key)).length;
+  const inWork = pool.filter(w => !isLearned(w.key) && state.cards[w.key]).length;
+  const ahead = total - learned - inWork;
+  const pctL = total ? 100*learned/total : 0;
+  const pctW = total ? 100*inWork/total : 0;
 
-  document.getElementById('statsGrid').innerHTML = `
-    <div class="stat-box"><span class="n">${total}</span><span class="l">слов в наборе</span></div>
-    <div class="stat-box"><span class="n">${started}</span><span class="l">начато</span></div>
-    <div class="stat-box"><span class="n">${learned}</span><span class="l">изучено</span></div>
-  `;
+  document.getElementById('statsSummary').innerHTML = `
+    <div class="sum-line"><b>${learned}</b> из ${total} слов знаешь</div>
+    <div class="stack">
+      <i class="s-learned" style="width:${pctL}%"></i><i class="s-work" style="width:${pctW}%"></i>
+    </div>
+    <div class="stack-legend">
+      <span><d style="background:var(--good)"></d><b>${learned}</b> изучено</span>
+      <span><d style="background:var(--amber)"></d><b>${inWork}</b> в работе</span>
+      <span><d style="background:var(--surface-2)"></d><b>${ahead}</b> впереди</span>
+    </div>`;
 
-  const chart = document.getElementById('chart');
-  const labels = document.getElementById('chartLabels');
+  const streak = calcStreak();
+  const tomorrow = dateStrOffset(1);
+  const due = pool.filter(w => !isLearned(w.key) && state.cards[w.key] && state.cards[w.key].due === tomorrow).length;
+  const todayCount = state.history[todayStr()] || 0;
+
+  document.getElementById('statsRows').innerHTML = `
+    <div class="stat-row">
+      <svg viewBox="0 0 24 24"><path d="M12 3s5 4.5 5 9a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 1.5 1 2.5 2 2.5 1.5 0 2-1.5 1-7z"/></svg>
+      <div class="t">Дней подряд<small>${streak === 0 ? 'сегодня ещё не занимался' : 'сегодня ' + plural(todayCount, 'повторение', 'повторения', 'повторений')}</small></div>
+      <div class="n">${streak}</div>
+    </div>
+    <div class="stat-row">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
+      <div class="t">Придёт завтра<small>слов на повторение</small></div>
+      <div class="n">${due}</div>
+    </div>`;
+
   const days = [];
-  for(let i=13;i>=0;i--) days.push(dateStrOffset(-i));
-  const max = Math.max(1, ...days.map(d=>state.history[d]||0));
-  chart.innerHTML = days.map(d=>{
+  for(let i=6;i>=0;i--) days.push(dateStrOffset(-i));
+  const max = Math.max(1, ...days.map(d => state.history[d]||0));
+  const today = todayStr();
+  document.getElementById('chart').innerHTML = days.map(d=>{
     const v = state.history[d]||0;
-    const h = Math.max(2, Math.round(80*v/max));
-    const isToday = d===todayStr();
-    return `<div class="bar ${isToday?'today':''}" style="height:${h}px" title="${d}: ${v}"></div>`;
+    const h = v === 0 ? 3 : Math.max(6, Math.round(70*v/max));
+    return `<div class="${d===today?'today':''}"><span class="v">${v}</span><div class="bar" style="height:${h}px"></div></div>`;
   }).join('');
-  labels.innerHTML = days.map((d,i)=> i%3===0 ? `<span>${d.slice(8)}</span>` : `<span></span>`).join('');
+  document.getElementById('chartLabels').innerHTML = days.map(d=>{
+    if(d === today) return '<span>сег</span>';
+    const wd = ['вс','пн','вт','ср','чт','пт','сб'][new Date(d+'T12:00:00').getDay()];
+    return `<span>${wd}</span>`;
+  }).join('');
+}
 
-  const catMap = {};
-  for(const w of active){
-    if(!catMap[w.cat]) catMap[w.cat] = {total:0, learned:0};
-    catMap[w.cat].total++;
-    if(isLearned(w.key)) catMap[w.cat].learned++;
+/* Серия: сколько дней подряд были повторения. Сегодняшний день не обрывает
+   серию, пока не кончился — если сегодня ещё ноль, считаем от вчера. */
+function calcStreak(){
+  let n = 0;
+  let start = (state.history[todayStr()]||0) > 0 ? 0 : -1;
+  for(let i = start; i > -400; i--){
+    if((state.history[dateStrOffset(i)]||0) > 0) n++;
+    else break;
   }
-  const rows = Object.entries(catMap).sort((a,b)=>b[1].learned-a[1].learned).slice(0,12);
-  document.getElementById('catBreakdown').innerHTML = rows.map(([cat,v])=>{
-    const pct = Math.round(100*v.learned/v.total);
-    return `<div class="cat-row"><span>${escapeHtml(cat)}</span><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div><span class="cnt">${v.learned}/${v.total}</span></div>`;
-  }).join('');
+  return n;
+}
+
+function plural(n, one, few, many){
+  const a = Math.abs(n) % 100, b = a % 10;
+  if(a > 10 && a < 20) return n + ' ' + many;
+  if(b > 1 && b < 5) return n + ' ' + few;
+  if(b === 1) return n + ' ' + one;
+  return n + ' ' + many;
 }
 
 /* ---------- NAV ---------- */
