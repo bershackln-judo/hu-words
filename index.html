@@ -99,6 +99,10 @@
   .btn-good:active{ background:var(--surface); }
   .btn-easy{ border-color:var(--good); } .btn-easy:active{ background:var(--good-soft); }
 
+  .next-btn{ display:block; width:100%; margin-top:16px; padding:13px; border-radius:10px;
+    border:1px solid var(--border); background:var(--surface-2); color:var(--text);
+    font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; }
+  .next-btn:active{ background:var(--surface-3); }
   .know-link{ display:block; text-align:center; margin-top:12px; font-size:14px; font-weight:600; color:var(--good); background:var(--good-soft); border:1px solid var(--good); border-radius:10px; padding:12px; cursor:pointer; width:100%; opacity:0; pointer-events:none; transition:opacity .2s ease; }
   .know-link:active{ background:var(--good); color:#fff; }
   .know-link.show{ opacity:1; pointer-events:auto; }
@@ -290,11 +294,10 @@
         <option value="30">30 слов</option>
         <option value="50">50 слов</option>
       </select>
-      <label>Направление перевода</label>
+      <label>Режим занятия</label>
       <select id="setDirection">
-        <option value="hu-ru">Венгерский → русский</option>
-        <option value="ru-hu">Русский → венгерский</option>
-        <option value="mixed">Вперемешку</option>
+        <option value="ru-hu">Русский → венгерский (обучение)</option>
+        <option value="hu-ru">Венгерский → русский (просмотр)</option>
       </select>
     </div>
     <div class="section-title">Данные</div>
@@ -724,16 +727,23 @@ function speakHu(text){
   window.speechSynthesis.speak(utt);
 }
 
-function pickDirection(){
-  if(state.settings.direction === 'mixed') return Math.random() < 0.5 ? 'hu-ru' : 'ru-hu';
-  return state.settings.direction;
+/* Направление больше не просто «как показывать». Узнать слово (HU→RU) и
+   вспомнить слово (RU→HU) — разные навыки, а карточка одна на слово. Если
+   ставить оценку по лёгкой стороне, срок уезжает на месяц, и трудная сторона
+   не проверяется никогда. Поэтому:
+     ru-hu → обучение: русское слово вперёд, оценки, сроки меняются
+     hu-ru → просмотр: венгерское вперёд, оценок нет, сроки не трогаем
+   Плюс знакомство: новое слово первый раз всегда показывается по-венгерски
+   без оценок, а спрашивается уже завтра с русской стороны. */
+function isViewMode(){
+  return (state.settings.direction || 'ru-hu') === 'hu-ru';
 }
 
 /* ---------- RENDER: STUDY ---------- */
 function renderQuickChips(){
   const el = document.getElementById('quickChips');
   const mode = state.settings.studyMode || 'dict';
-  const dirLabel = {'hu-ru':'HU→RU','ru-hu':'RU→HU','mixed':'Вперемешку'}[state.settings.direction];
+  const dirLabel = isViewMode() ? 'HU→RU просмотр' : 'RU→HU';
   let html = `<button class="chip ${mode==='dict'?'active':''}" data-act="mode-dict">Словарь</button>`
     + `<button class="chip ${mode==='custom'?'active':''}" data-act="mode-custom">Мои слова</button>`
     + `<button class="chip active" data-act="cyc-dir">${dirLabel}</button>`;
@@ -744,7 +754,7 @@ function renderQuickChips(){
       if(act==='mode-dict') state.settings.studyMode = 'dict';
       if(act==='mode-custom') state.settings.studyMode = 'custom';
       if(act==='cyc-dir'){
-        state.settings.direction = state.settings.direction === 'hu-ru' ? 'ru-hu' : 'hu-ru';
+        state.settings.direction = isViewMode() ? 'ru-hu' : 'hu-ru';
       }
       await saveState();
       buildQueue();
@@ -793,40 +803,78 @@ function renderStudy(){
   const key = queue[0];
   const w = findWord(key);
   if(!w){ queue.shift(); renderStudy(); return; }
-  currentDir = pickDirection();
+  const isNew = !state.cards[key];
+  // без оценок: знакомство с новым словом и весь просмотровый режим
+  const viewOnly = !practiceMode && (isNew || isViewMode());
+  currentDir = viewOnly ? 'hu-ru' : 'ru-hu';
   const front = currentDir==='hu-ru' ? w.hu : w.ru;
   const back = currentDir==='hu-ru' ? w.ru : w.hu;
+  const badge = isNew ? 'знакомство' : (viewOnly ? 'просмотр' : 'RU→HU');
 
   revealed = false;
   cardArea.innerHTML = `
     <div class="card" id="cardEl">
       <div class="tier-badge">${escapeHtml(w.cat)}</div>
-      <div class="dir-badge">${currentDir==='hu-ru'?'HU→RU':'RU→HU'}</div>
+      <div class="dir-badge">${badge}</div>
       <div class="hu-word">${escapeHtml(front)}</div>
       <div class="underline"></div>
       <div class="ru-word">${escapeHtml(back)}</div>
       <div class="tap-hint">нажми, чтобы увидеть перевод</div>
       <button class="speak-btn" id="speakBtn">🔊</button>
     </div>
+    ${viewOnly ? `<button class="next-btn" id="nextBtn">Дальше</button>` : `
     <div class="buttons" id="btnRow">
       <button class="btn-again" data-g="again">Снова<small>&lt;1м</small></button>
       <button class="btn-hard" data-g="hard">Трудно<small id="hardIvl"></small></button>
       <button class="btn-good" data-g="good">Хорошо<small id="goodIvl"></small></button>
       <button class="btn-easy" data-g="easy">Легко<small id="easyIvl"></small></button>
-    </div>
+    </div>`}
     <button class="know-link" id="knowLink">Изучено — больше не показывать</button>
   `;
-  document.getElementById('cardEl').addEventListener('click', ()=>{
+  function reveal(){
     if(revealed) return;
     revealed = true;
     document.getElementById('cardEl').classList.add('revealed');
-    document.getElementById('btnRow').classList.add('show');
+    // в просмотре и на знакомстве кнопок оценок нет — обращение к #btnRow
+    // без проверки роняло обработчик, и «Изучено» не появлялось
+    const btnRow = document.getElementById('btnRow');
+    if(btnRow) btnRow.classList.add('show');
     document.getElementById('knowLink').classList.add('show');
-  });
+  }
+  document.getElementById('cardEl').addEventListener('click', reveal);
+  // новое слово прятать незачем: ты его ещё не знаешь, это знакомство
+  if(isNew) reveal();
   document.getElementById('speakBtn').addEventListener('click', (e)=>{
     e.stopPropagation();
     speakHu(w.hu);
   });
+  document.getElementById('knowLink').addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    markLearned(key);
+    queue.shift();
+    buildQueue();
+    await saveState();
+    renderStudy();
+  });
+
+  if(viewOnly){
+    document.getElementById('nextBtn').addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      // знакомство состоялось: слово получает карточку и придёт завтра уже
+      // с русской стороны. Просмотр старых слов сроки не трогает
+      if(isNew){
+        state.cards[key] = { ivl:0, ease:2.3, reps:0, due: dateStrOffset(1) };
+        state.newIntroducedCount++;
+        const t = todayStr();
+        state.history[t] = (state.history[t]||0)+1;
+      }
+      queue.shift();
+      await saveState();
+      renderStudy(); renderQuickChips();
+    });
+    return;
+  }
+
   const c = state.cards[key];
   document.getElementById('hardIvl').textContent = fmtDays(previewHard(c));
   document.getElementById('goodIvl').textContent = fmtDays(previewInterval(c,'good'));
@@ -851,14 +899,6 @@ function renderStudy(){
       await saveState();
       renderStudy(); renderQuickChips();
     });
-  });
-  document.getElementById('knowLink').addEventListener('click', async (e)=>{
-    e.stopPropagation();
-    markLearned(key);
-    queue.shift();
-    buildQueue();
-    await saveState();
-    renderStudy();
   });
 }
 
@@ -1107,7 +1147,7 @@ document.getElementById('gearBtn').addEventListener('click', ()=>{
   sel.options[0].textContent = 'Стартовое ядро (' + BASE_WORDS.filter(w=>w[3]>0).length + ')';
   sel.options[1].textContent = 'Весь словарь (' + BASE_WORDS.length + ')';
   document.getElementById('setWordSet').value = state.settings.wordSet;
-  document.getElementById('setDirection').value = state.settings.direction;
+  document.getElementById('setDirection').value = isViewMode() ? 'hu-ru' : 'ru-hu';
   document.getElementById('setActiveSetSize').value = String(state.settings.activeSetSize || 20);
   document.getElementById('settingsOverlay').classList.remove('hidden');
   renderAccountPanel();
