@@ -872,7 +872,8 @@ const POS_LABELS = {
 function renderWordFilterChips(){
   const el = document.getElementById('wordFilterChips');
   const allCount = getAllWordsForBrowsing().filter(w=>!isLearned(w.key)).length;
-  const opts = [[`all`,`Все (${allCount})`],['custom',`Мои слова (${state.custom.length})`],['learned',`Изучено (${state.learned.length})`]];
+  // «Все» врало: фильтр показывает НЕизученные слова, а не весь словарь
+  const opts = [[`all`,`Не изучено (${allCount})`],['custom',`Мои слова (${state.custom.length})`],['learned',`Изучено (${state.learned.length})`]];
   el.innerHTML = opts.map(([v,l])=>`<button class="chip ${wordFilter===v?'active':''}" data-f="${v}">${l}</button>`).join('');
   el.querySelectorAll('.chip').forEach(b=>b.addEventListener('click', ()=>{ wordFilter=b.dataset.f; wordsShown=PAGE_SIZE; renderWordsTab(); }));
 }
@@ -1007,9 +1008,11 @@ document.getElementById('searchInput').addEventListener('input', ()=>{ wordsShow
 
 /* ---------- STATS TAB ---------- */
 function renderStats(){
-  // тот же пул, что и в занятии: в режиме «Словарь» свои слова не считаются,
-  // в режиме «Мои слова» — только они
-  const pool = getFullPool(state.settings.studyMode || 'dict');
+  /* Считаем по всему словарю плюс свои слова — по тому же списку, что и вкладка
+     «Слова». Раньше статистика зависела от чипа «Словарь / Мои слова» и от
+     настройки Ядро/Весь словарь, из-за чего «Изучено (696)» на одном экране
+     превращалось в «7» на другом. Один список — одно число */
+  const pool = getAllWordsForBrowsing();
   const total = pool.length;
   // три части в сумме дают весь набор — иначе числа снова начнут спорить
   const learned = pool.filter(w => isLearned(w.key)).length;
