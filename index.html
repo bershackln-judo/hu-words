@@ -481,7 +481,9 @@ function uid(){ return 'c'+Date.now()+Math.random().toString(36).slice(2,7); }
 
 function defaultState(){
   return {
-    settings: { wordSet: 'core', direction: 'hu-ru', studyMode: 'dict', activeSetSize: 20 },
+    // direction по умолчанию ОБЯЗАТЕЛЬНО 'ru-hu': 'hu-ru' — это просмотр без
+    // оценок, в нём сроки не меняются и новый пользователь стоит на месте
+    settings: { wordSet: 'core', direction: 'ru-hu', studyMode: 'dict', activeSetSize: 20 },
     activeSet: { dict: [], custom: [] },
     decks: [],
     cards: {},
@@ -1346,10 +1348,14 @@ async function submitAuth(){
       await fbAuth.signInWithEmailAndPassword(email, password);
     }
   } catch(e){
+    // setAuthMode прячет #authError, поэтому он ВСЕГДА идёт до showAuthError.
+    // Раньше он стоял в finally — то есть выполнялся после catch и гасил
+    // только что показанное сообщение. Пользователь не видел причину отказа
+    setAuthMode(authMode);
     showAuthError(authError(e));
-  } finally {
-    setAuthMode(authMode);   // всегда возвращаем кнопку в рабочее состояние
+    return;
   }
+  setAuthMode(authMode);
 }
 
 async function resetPassword(){
