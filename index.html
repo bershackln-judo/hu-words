@@ -85,6 +85,11 @@
   .card.revealed .underline{ width:64px; }
   .ru-word{ font-size:19px; color:var(--text-muted); margin-top:16px; min-height:26px; opacity:0; transition:opacity .25s ease; }
   .card.revealed .ru-word{ opacity:1; color:var(--text); }
+  /* синонимы: другие венгерские слова с тем же значением. Показываются вместе
+     с ответом, чтобы вспомненный вариант тоже засчитывался */
+  .alt-word{ font-size:13px; color:var(--text-muted); margin-top:8px; opacity:0; transition:opacity .25s ease; }
+  .card.revealed .alt-word{ opacity:1; }
+  .word-item .alt{ font-size:12px; color:var(--text-muted); margin-top:2px; }
   .tap-hint{ font-size:13px; color:var(--text-muted); margin-top:20px; }
   .card.revealed .tap-hint{ display:none; }
   .speak-btn{ position:absolute; bottom:12px; right:14px; background:none; border:none; font-size:22px; cursor:pointer; opacity:0.5; padding:4px; line-height:1; }
@@ -592,15 +597,15 @@ window.addEventListener('online', ()=>{ if(cloudSaveDirty) flushCloudSave(); });
 function getAllActiveWords(){
   const base = BASE_WORDS
     .filter(w => state.settings.wordSet === 'full' || w[3] > 0)
-    .map(w => ({ key: w[0], hu: state.overrides_hu[w[0]] || w[0], ru: state.overrides[w[0]] || w[1], cat: w[2], tier: w[3], pos: w[4] || 'сущ', custom:false }));
-  const custom = state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos: c.pos || 'сущ', custom:true }));
+    .map(w => ({ key: w[0], hu: state.overrides_hu[w[0]] || w[0], ru: state.overrides[w[0]] || w[1], cat: w[2], tier: w[3], pos: w[4] || 'сущ', alt: w[5] || '', custom:false }));
+  const custom = state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos: c.pos || 'сущ', alt:'', custom:true }));
   return base.concat(custom);
 }
 function getAllWordsForBrowsing(){
   // Всегда весь словарь — вкладка "Слова" не должна зависеть от выбора Ядро/Весь словарь для занятий
   const base = BASE_WORDS
-    .map(w => ({ key: w[0], hu: state.overrides_hu[w[0]] || w[0], ru: state.overrides[w[0]] || w[1], cat: w[2], tier: w[3], pos: w[4] || 'сущ', custom:false }));
-  const custom = state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos: c.pos || 'сущ', custom:true }));
+    .map(w => ({ key: w[0], hu: state.overrides_hu[w[0]] || w[0], ru: state.overrides[w[0]] || w[1], cat: w[2], tier: w[3], pos: w[4] || 'сущ', alt: w[5] || '', custom:false }));
+  const custom = state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos: c.pos || 'сущ', alt:'', custom:true }));
   return base.concat(custom);
 }
 /* Два режима занятий не пересекаются: «Словарь» — только встроенные слова,
@@ -609,7 +614,7 @@ function getAllWordsForBrowsing(){
    приходили в обычных занятиях. Не возвращать это обратно. */
 function getFullPool(mode){
   if(mode === 'custom'){
-    return state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos:c.pos||'сущ', custom:true }));
+    return state.custom.map(c => ({ key:'custom:'+c.id, hu:c.hu, ru:c.ru, cat:c.cat||'Мои слова', tier:0, pos:c.pos||'сущ', alt:'', custom:true }));
   }
   return getAllActiveWords().filter(w => !w.custom);
 }
@@ -821,6 +826,7 @@ function renderStudy(){
       <div class="hu-word">${escapeHtml(front)}</div>
       <div class="underline"></div>
       <div class="ru-word">${escapeHtml(back)}</div>
+      ${w.alt ? `<div class="alt-word">${currentDir==='hu-ru' ? 'то же самое: ' : 'также подойдёт: '}${escapeHtml(w.alt)}</div>` : ''}
       <div class="tap-hint">нажми, чтобы увидеть перевод</div>
       <button class="speak-btn" id="speakBtn">🔊</button>
     </div>
@@ -932,7 +938,7 @@ function filteredWords(){
   if(wordFilter === 'custom') all = all.filter(w=>w.custom);
   if(wordFilter === 'learned') all = all.filter(w=>isLearned(w.key));
   if(wordFilter === 'all') all = all.filter(w=>!isLearned(w.key));
-  if(q) all = all.filter(w=> w.hu.toLowerCase().includes(q) || w.ru.toLowerCase().includes(q));
+  if(q) all = all.filter(w=> w.hu.toLowerCase().includes(q) || w.ru.toLowerCase().includes(q) || (w.alt||'').toLowerCase().includes(q));
   return all;
 }
 
@@ -944,6 +950,7 @@ function wordItemHtml(w){
     <div class="word-item" data-key="${escapeHtml(w.key)}">
       <div class="top"><span class="hu">${escapeHtml(w.hu)}</span><span class="cat">${escapeHtml(w.cat)} · ${escapeHtml(POS_LABELS[w.pos]||w.pos)}</span></div>
       <div class="ru">${escapeHtml(w.ru)}</div>
+      ${w.alt ? `<div class="alt">то же самое: ${escapeHtml(w.alt)}</div>` : ''}
       <div class="actions">
         <button data-act="edit">Изменить перевод</button>
         ${statusBtn}
