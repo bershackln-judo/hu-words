@@ -387,9 +387,9 @@
     <div class="sheet-handle"></div>
     <div class="section-title" style="margin-top:0;" id="editWordTitle">Изменить слово</div>
     <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:4px;">Венгерский</label>
-    <input id="editHuInput" type="text" placeholder="Венгерское слово" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:16px;color:var(--text);margin-bottom:14px;">
+    <input id="editHuInput" type="text" placeholder="Венгерское слово" style="width:100%;box-sizing:border-box;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:16px;color:var(--text);margin-bottom:14px;">
     <label style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:4px;">Русский перевод</label>
-    <input id="editRuInput" type="text" placeholder="Русский перевод" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:16px;color:var(--text);margin-bottom:20px;">
+    <input id="editRuInput" type="text" placeholder="Русский перевод" style="width:100%;box-sizing:border-box;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:16px;color:var(--text);margin-bottom:20px;">
     <button id="editWordSaveBtn" class="act" style="width:100%;margin-bottom:10px;">Сохранить</button>
     <button id="editWordCancelBtn" class="act" style="width:100%;background:none;color:var(--text-muted);">Отмена</button>
   </div>
@@ -936,7 +936,7 @@ function renderWordFilterChips(){
   el.innerHTML = opts.map(([v,l])=>`<button class="chip ${wordFilter===v?'active':''}" data-f="${v}">${l}</button>`).join('');
   el.querySelectorAll('.chip').forEach(b=>b.addEventListener('click', ()=>{ wordFilter=b.dataset.f; wordsShown=PAGE_SIZE; renderWordsTab(); }));
 }
-/* Список отдаётся порциями: в словаре 1718 слов, а раньше он целиком
+/* Список отдаётся порциями: в словаре под две тысячи слов, а раньше он целиком
    перестраивался на КАЖДОЕ нажатие клавиши в поиске — вместе с несколькими
    тысячами обработчиков. Теперь рисуем PAGE_SIZE штук, остальное по кнопке,
    а клики ловим одним слушателем на контейнере (см. ниже). */
