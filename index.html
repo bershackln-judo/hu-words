@@ -639,9 +639,12 @@ function fillActiveSet(mode){
   const inSet = new Set(state.activeSet[setKey]);
   // добираем только по-настоящему новые слова — те, что уже на повторениях,
   // обратно в проработку не тянем; ядро (tier > 0) идёт первым
+  // порядок: ядро 1 → ядро 2 → остальное. Раньше сортировка различала только
+  // «ядро / не ядро», и внутри ядра слова шли в порядке файла, то есть по темам
+  const layer = w => w.tier === 0 ? 9 : w.tier;
   const available = getFullPool(mode)
     .filter(w => !isLearned(w.key) && !inSet.has(w.key) && !state.cards[w.key])
-    .sort((a, b) => (b.tier > 0 ? 1 : 0) - (a.tier > 0 ? 1 : 0));
+    .sort((a, b) => layer(a) - layer(b));
   while(state.activeSet[setKey].length < maxSize && available.length > 0){
     state.activeSet[setKey].push(available.shift().key);
   }
