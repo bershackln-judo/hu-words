@@ -654,16 +654,19 @@ function findWord(key){
 }
 
 /* ---------- SRS ---------- */
+/* Лесенка первых интервалов: Трудно 1д < Хорошо 2д < Легко 4д. Раньше «Хорошо»
+   на новой карточке давало 1 день — ровно столько же, сколько «Трудно»
+   (previewHard не может вернуть меньше суток), и две кнопки делали одно и то же. */
 function previewInterval(c, grade){
   const ease = c ? c.ease : 2.3;
   const reps = c ? c.reps : 0;
   if(grade === 'good'){
-    if(reps === 0) return 1;
-    if(reps === 1) return 3;
-    return Math.round((c.ivl||1) * ease);
-  } else {
     if(reps === 0) return 2;
     if(reps === 1) return 4;
+    return Math.round((c.ivl||1) * ease);
+  } else {
+    if(reps === 0) return 4;
+    if(reps === 1) return 6;
     return Math.round((c.ivl||1) * ease * 1.3);
   }
 }
@@ -815,11 +818,13 @@ function renderStudy(){
   if(!w){ queue.shift(); renderStudy(); return; }
   const isNew = !state.cards[key];
   // без оценок: знакомство с новым словом и весь просмотровый режим
-  const viewOnly = !practiceMode && (isNew || isViewMode());
+  // в практике оценки всё равно ничего не меняли — показываем «Дальше»,
+  // чтобы карточка не выглядела сломанной
+  const viewOnly = practiceMode || isNew || isViewMode();
   currentDir = viewOnly ? 'hu-ru' : 'ru-hu';
   const front = currentDir==='hu-ru' ? w.hu : w.ru;
   const back = currentDir==='hu-ru' ? w.ru : w.hu;
-  const badge = isNew ? 'знакомство' : (viewOnly ? 'просмотр' : 'RU→HU');
+  const badge = practiceMode ? 'практика' : (isNew ? 'знакомство' : (viewOnly ? 'просмотр' : 'RU→HU'));
 
   revealed = false;
   cardArea.innerHTML = `
@@ -840,7 +845,7 @@ function renderStudy(){
       <button class="btn-good" data-g="good">Хорошо<small id="goodIvl"></small></button>
       <button class="btn-easy" data-g="easy">Легко<small id="easyIvl"></small></button>
     </div>`}
-    <button class="know-link" id="knowLink">Изучено — больше не показывать</button>
+    ${practiceMode ? '' : `<button class="know-link" id="knowLink">Изучено — больше не показывать</button>`}
   `;
   function reveal(){
     if(revealed) return;
@@ -850,7 +855,8 @@ function renderStudy(){
     // без проверки роняло обработчик, и «Изучено» не появлялось
     const btnRow = document.getElementById('btnRow');
     if(btnRow) btnRow.classList.add('show');
-    document.getElementById('knowLink').classList.add('show');
+    const know = document.getElementById('knowLink');
+    if(know) know.classList.add('show');   // в практике этой кнопки нет
   }
   document.getElementById('cardEl').addEventListener('click', reveal);
   // новое слово прятать незачем: ты его ещё не знаешь, это знакомство
@@ -859,7 +865,8 @@ function renderStudy(){
     e.stopPropagation();
     speakHu(w.hu);
   });
-  document.getElementById('knowLink').addEventListener('click', async (e)=>{
+  const knowLink = document.getElementById('knowLink');
+  if(knowLink) knowLink.addEventListener('click', async (e)=>{
     e.stopPropagation();
     markLearned(key);
     queue.shift();
@@ -873,7 +880,8 @@ function renderStudy(){
       e.stopPropagation();
       // знакомство состоялось: слово получает карточку и придёт завтра уже
       // с русской стороны. Просмотр старых слов сроки не трогает
-      if(isNew){
+      // в практике карточка не заводится: обещано, что прогресс не изменится
+      if(isNew && !practiceMode){
         state.cards[key] = { ivl:0, ease:2.3, reps:0, due: dateStrOffset(1) };
         state.newIntroducedCount++;
         const t = todayStr();
@@ -997,8 +1005,19 @@ document.getElementById('wordsList').addEventListener('click', async (e)=>{
     unmarkLearned(key);
     const c = state.cards[key];
     if(c){ c.ivl = 1; c.reps = 0; c.due = todayStr(); }
+    // fillActiveSet добирает только слова БЕЗ карточки, поэтому вернувшееся
+    // слово само в набор не попадёт и не попадёт в счётчик «В проработке»
+    const setKey = key.startsWith('custom:') ? 'custom' : 'dict';
+    if(!state.activeSet[setKey].includes(key)) state.activeSet[setKey].push(key);
   }
-  if(act === 'delete'){ state.custom = state.custom.filter(c=>'custom:'+c.id !== key); }
+  if(act === 'delete'){
+    // за словом тянется хвост: карточка, отметка «изучено», место в активном
+    // наборе. Без чистки счётчики на разных экранах расходятся навсегда
+    state.custom = state.custom.filter(c=>'custom:'+c.id !== key);
+    delete state.cards[key];
+    unmarkLearned(key);
+    state.activeSet.custom = (state.activeSet.custom||[]).filter(k => k !== key);
+  }
   saveState();
   buildQueue();
   renderWordsTab();
